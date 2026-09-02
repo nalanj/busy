@@ -207,6 +207,9 @@ func main() {
 			} else {
 				log("info", "scheduler", fmt.Sprintf("job %s skipped (session already exists with %d messages)", job.Name, len(messages)))
 			}
+		} else if schedule == "@web-message" {
+			// @web-message is triggered via web API, not scheduler
+			log("info", "scheduler", fmt.Sprintf("job %s waiting for web input", job.Name))
 		} else {
 			// Schedule recurring jobs
 			_, err := sched.Add(job.Name, schedule, func() {
