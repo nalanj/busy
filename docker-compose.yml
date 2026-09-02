@@ -1,0 +1,14 @@
+services:
+  aadc:
+    build: .
+    image: nalanj/aadc:latest
+    container_name: aadc
+    environment:
+      - MINIMAX_API_KEY
+    volumes:
+      - ./config/example.yaml:/config/example.yaml:ro
+      - ./state:/root/.local/share/aadc
+    network_mode: host
+    command: ["--config", "/config/example.yaml"]
+    stdin_open: true
+    tty: true

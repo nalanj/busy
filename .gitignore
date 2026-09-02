@@ -1,0 +1,7 @@
+/aadc
+dist/
+state/
+state.bak
+oldstate
+config/
+catwalk-configs/

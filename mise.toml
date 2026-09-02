@@ -1,0 +1,17 @@
+[tools]
+go = "latest"
+
+[tasks.build]
+run = "go build -o dist/aadc ./cmd/aadc/"
+
+[tasks.docker-build]
+run = "go build -o dist/aadc ./cmd/aadc/ && docker build -t nalanj/aadc ."
+
+[tasks.docker-clean]
+run = "docker image prune -f"
+
+[tasks.test]
+run = "go test ./..."
+
+[tasks.all]
+run = ["build", "test"]

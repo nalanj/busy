@@ -1,0 +1,20 @@
+# AADC Workspace Configuration
+
+# Aliases for common operations
+alias ll='ls -la'
+alias la='ls -A'
+alias l='ls -CF'
+
+# Quick navigation
+alias ws='cd /root/.local/share/aadc/aadc/workspace'
+alias scripts='cd /root/.local/share/aadc/aadc/workspace/.scripts'
+
+# Helper functions
+mcd() { mkdir -p "$1" && cd "$1"; }
+
+# Environment
+export EDITOR=vim
+export VISUAL=vim
+
+# Workspace paths
+export WORKSPACE=/root/.local/share/aadc/aadc/workspace

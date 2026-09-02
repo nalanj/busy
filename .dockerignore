@@ -1,0 +1,10 @@
+.git
+*.md
+cmd/
+internal/
+go.*
+*.test
+run.sh
+docker-compose.yml
+config/
+state/
