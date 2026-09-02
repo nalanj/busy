@@ -178,11 +178,11 @@ func main() {
 
 	for _, job := range cfg.Jobs {
 		job := job // capture range variable
-		log("info", "scheduler", fmt.Sprintf("registering job %s with schedule %s", job.Name, job.Schedule))
 
 		schedule := job.Schedule
-		if schedule == "@once" || schedule == "@session-start" {
-			// Run immediately by enqueuing
+		if schedule == "@once" {
+			// @once always runs once
+			log("info", "scheduler", fmt.Sprintf("job %s queued for one-time execution", job.Name))
 			enqJob := queue.Job{
 				Name:       job.Name,
 				Prompt:     job.Prompt,
@@ -191,7 +191,22 @@ func main() {
 			}
 			jobQueue.Enqueue(enqJob)
 			web.EmitGlobal("queue", map[string]interface{}{"action": "enqueue", "job": enqJob})
-			log("info", "scheduler", fmt.Sprintf("job %s queued for immediate execution (%s)", job.Name, schedule))
+		} else if schedule == "@session-start" {
+			// @session-start only runs on first session (no existing messages)
+			messages, _ := runner.Store().GetMessages()
+			if len(messages) == 0 {
+				log("info", "scheduler", fmt.Sprintf("job %s queued for first session", job.Name))
+				enqJob := queue.Job{
+					Name:       job.Name,
+					Prompt:     job.Prompt,
+					Trigger:    schedule,
+					EnqueuedAt: time.Now(),
+				}
+				jobQueue.Enqueue(enqJob)
+				web.EmitGlobal("queue", map[string]interface{}{"action": "enqueue", "job": enqJob})
+			} else {
+				log("info", "scheduler", fmt.Sprintf("job %s skipped (session already exists with %d messages)", job.Name, len(messages)))
+			}
 		} else {
 			// Schedule recurring jobs
 			_, err := sched.Add(job.Name, schedule, func() {
