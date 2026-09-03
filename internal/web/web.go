@@ -286,8 +286,8 @@ send
 			}
 			callHtml := html.EscapeString(callLine)
 
-			// Generate summary and full output HTML
-			var summaryHtml, fullOutputHtml string
+			// Generate full output HTML
+			var fullOutputHtml string
 			var showExpand bool
 
 			if fullResult != "" {
@@ -312,24 +312,13 @@ send
 					}
 				}
 				fullOutputHtml = strings.Join(outputLines, "\n")
-
-				// Create summary (truncated)
-				if len(resultClean) > 60 {
-					summaryHtml = html.EscapeString(resultClean[:60]) + "..."
-				} else {
-					summaryHtml = html.EscapeString(resultClean)
-				}
 			}
 
 			// Build the HTML
-			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call" onclick="toggleToolOutput(this)"><span class="tool-toggle">▶</span><span class="tool-cmd">%s</span><span class="tool-summary">%s</span>`, callHtml, summaryHtml))
+			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call" onclick="toggleToolOutput(this)"><span class="tool-toggle">▶</span><span class="tool-cmd">%s</span>`, callHtml))
 
-			if fullResult != "" {
-				if showExpand {
-					sb.WriteString(fmt.Sprintf(`</div><div class="tool-output" style="display:none">%s</div></div>`, fullOutputHtml))
-				} else {
-					sb.WriteString(`</div></div>`)
-				}
+			if fullResult != "" && showExpand {
+				sb.WriteString(fmt.Sprintf(`</div><div class="tool-output" style="display:none">%s</div></div>`, fullOutputHtml))
 			} else {
 				sb.WriteString(`</div></div>`)
 			}
