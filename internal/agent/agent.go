@@ -290,11 +290,8 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 						}
 					}
 					if lastToolIdx >= 0 {
-						log("debug", "update_tool", fmt.Sprintf("appending result to tool idx %d", lastToolIdx))
 						msgs[lastToolIdx].Content = msgs[lastToolIdx].Content + "\n" + resultStr
 						r.store.UpdateMessage(msgs[lastToolIdx])
-					} else {
-						log("debug", "update_tool", fmt.Sprintf("no matching tool found for %s", result.ToolName))
 					}
 				}
 				if r.sse != nil {
