@@ -573,7 +573,21 @@ document.querySelectorAll('.tab').forEach(tab => {
         
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('panel-' + tabName).classList.add('active');
+        
+        // Update URL without reloading
+        history.pushState({tab: tabName}, '', '/' + tabName);
     });
+});
+
+// Handle back/forward navigation
+window.addEventListener('popstate', (e) => {
+    const tabName = e.state && e.state.tab || 'log';
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    const tab = document.querySelector('.tab[data-tab="' + tabName + '"]');
+    if (tab) tab.classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('panel-' + tabName);
+    if (panel) panel.classList.add('active');
 });
 
 // Filter chips
