@@ -797,7 +797,8 @@ function connectSSE() {
     });
 
     events.addEventListener('queue', (e) => {
-        const data = JSON.parse(e.data);
+        const rawData = JSON.parse(e.data);
+        const data = rawData.content || rawData;
         const queueBadge = document.getElementById('queue-badge');
         if (data.action === 'enqueue') {
             queueBadge.textContent = parseInt(queueBadge.textContent) + 1;
