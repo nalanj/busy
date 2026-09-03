@@ -587,6 +587,21 @@ document.querySelectorAll('.tab').forEach(tab => {
         
         // Update URL without reloading
         history.pushState({tab: tabName}, '', '/' + tabName);
+        
+        // Refresh queue list when switching to queue tab
+        if (tabName === 'queue') {
+            fetch('/queue')
+                .then(r => r.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newList = doc.getElementById('queue-list');
+                    const oldList = document.getElementById('queue-list');
+                    if (newList && oldList) {
+                        oldList.innerHTML = newList.innerHTML;
+                    }
+                });
+        }
     });
 });
 
@@ -786,8 +801,36 @@ function connectSSE() {
         const queueBadge = document.getElementById('queue-badge');
         if (data.action === 'enqueue') {
             queueBadge.textContent = parseInt(queueBadge.textContent) + 1;
+            // Refresh queue list if on queue tab
+            if (window.location.pathname === '/queue') {
+                fetch('/queue')
+                    .then(r => r.text())
+                    .then(html => {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const newList = doc.getElementById('queue-list');
+                        const oldList = document.getElementById('queue-list');
+                        if (newList && oldList) {
+                            oldList.innerHTML = newList.innerHTML;
+                        }
+                    });
+            }
         } else if (data.action === 'dequeue') {
             queueBadge.textContent = Math.max(0, parseInt(queueBadge.textContent) - 1);
+            // Refresh queue list if on queue tab
+            if (window.location.pathname === '/queue') {
+                fetch('/queue')
+                    .then(r => r.text())
+                    .then(html => {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const newList = doc.getElementById('queue-list');
+                        const oldList = document.getElementById('queue-list');
+                        if (newList && oldList) {
+                            oldList.innerHTML = newList.innerHTML;
+                        }
+                    });
+            }
         }
     });
 
