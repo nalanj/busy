@@ -257,6 +257,12 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 					inputSummary = inputSummary[:100] + "..."
 				}
 				logTool(call.ToolName, inputSummary)
+				r.store.AddMessage(storage.Message{
+					Role:      "tool",
+					ToolName:  call.ToolName,
+					Content:   "$ " + call.ToolName + " " + inputSummary,
+					Timestamp: time.Now(),
+				})
 				if r.sse != nil {
 					r.sse.Emit("tool", map[string]string{
 						"tool":    call.ToolName,
@@ -271,6 +277,12 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 					resultStr = resultStr[:200] + "..."
 				}
 				log("debug", "tool_result", resultStr)
+				r.store.AddMessage(storage.Message{
+					Role:      "tool_result",
+					ToolName:  result.ToolName,
+					Content:   resultStr,
+					Timestamp: time.Now(),
+				})
 				if r.sse != nil {
 					r.sse.Emit("tool_result", map[string]string{
 						"tool":    result.ToolName,

@@ -49,7 +49,7 @@ html, body {
 .live-dot.disconnected { background: #f44336; }
 .live-text { color: #34D399; font-size: 10px; letter-spacing: 1px; }
 .tabs { display: flex; gap: 4px; padding: 0; background: #0F1626; flex-shrink: 0; }
-.tab { padding: 6px 14px; border-radius: 7px; font-size: 12px; color: #8B94AD; cursor: pointer; border: none; background: transparent; font-family: inherit; }
+.tab { padding: 6px 14px; border-radius: 7px; font-size: 12px; color: #8B94AD; cursor: pointer; border: none; background: transparent; font-family: inherit; text-decoration: none; display: inline-block; }
 .tab:hover { background: #1B2440; }
 .tab.active { background: #1B2440; color: #E6EAF5; font-weight: 600; }
 .tab-badge { background: #22D3EE1F; color: #22D3EE; padding: 2px 7px; border-radius: 999px; font-size: 10px; }
