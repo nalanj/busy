@@ -203,7 +203,7 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 	fantasyMessages := convertMessages(messages)
 
 	// Wrap initial prompt with completion instructions
-	initialPrompt := prompt + "\n\nWhen finished, respond with '<<<<<DONE>>>>>' on its own line."
+	initialPrompt := prompt + "\n\nWhen finished, respond with '<<<<<DONE>>>>>'."
 	currentPrompt := initialPrompt
 	iteration := 0
 	compactionRetries := 0
@@ -386,7 +386,7 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			},
 		})
 
-		currentPrompt = "Continue. When finished, respond with '<<<<<DONE>>>>>' on its own line."
+		currentPrompt = "Continue. When finished, respond with '<<<<<DONE>>>>>'."
 	}
 
 	log("error", "agent", fmt.Sprintf("max iterations reached (%d)", maxIterations))

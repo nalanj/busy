@@ -85,7 +85,7 @@ Agents have access to the following tools:
 
 ## Done Marker
 
-Agents signal completion by including `<<<<<DONE>>>>>` alone on its own line.
+Agents signal completion by including `<<<<<DONE>>>>>` in their response.
 
 ## Skills
 
