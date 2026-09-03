@@ -260,8 +260,6 @@ send
 
 		// Render tool messages (may contain call + result)
 		if msg.Role == "tool" {
-			toolIcon := `<svg class="tool-icon" viewBox="0 0 14 14" fill="#22D3EE"><path d="M2.225 2.352q-.195.027-.321.174-.126.147-.147.352-.021.202.092.369.055.072 1.61 1.61l1.552 1.555-1.579 1.583q-1.066 1.063-1.326 1.336-.256.273-.301.342-.109.239-.014.465.099.222.321.321.226.096.465-.014.068-.044.376-.338.307-.294 1.818-1.822 1.863-1.89.055-.113.055-.26 0-.147-.055-.273-.031-.055-1.863-1.89-1.22-1.23-1.542-1.538-.321-.308-.376-.338-.167-.068-.352-.041zm4.635 8.162q-.126.027-.239.133-.109.106-.167.232-.068.209.014.427.085.215.294.314l.113.041 4.146.014q.53-.014.711-.027.126 0 .202-.041.079-.044.147-.12.072-.079.117-.161.161-.096.226.01.448-.082.226-.321.338l.082-.027-2.437-.014q-2.42 0-2.505.014zm-5.643 1.709q-.126.027-.239.133-.109.106-.167.232-.027.068-.027.181 0 .113 0 .629l0 .728.041.085q.044.068.126.154.085.082.161.126.079.041.246.041.167 0 .243-.041.079-.044.161-.126.085-.085.129-.154l.041-.085 0-.728q0-.516 0-.629 0-.113-.027-.181-.085-.198-.273-.301-.188-.106-.413-.065z"/></svg>`
-
 			// Split content by newline - first part is call, rest is result
 			parts := strings.SplitN(msg.Content, "\n", 2)
 			callLine := strings.TrimSpace(parts[0])
@@ -324,7 +322,7 @@ send
 			}
 
 			// Build the HTML
-			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call" onclick="toggleToolOutput(this)">%s<span class="tool-cmd">%s</span><span class="tool-summary">%s</span><span class="tool-toggle">▶</span>`, toolIcon, callHtml, summaryHtml))
+			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call" onclick="toggleToolOutput(this)"><span class="tool-toggle">▶</span><span class="tool-cmd">%s</span><span class="tool-summary">%s</span>`, callHtml, summaryHtml))
 
 			if fullResult != "" {
 				if showExpand {
