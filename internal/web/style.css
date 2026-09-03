@@ -159,7 +159,7 @@ html, body {
     .brand { gap: 12px; flex-shrink: 0; }
     .live-badge { flex-shrink: 0; }
     .live-text { display: inline; }
-    .tabs { flex: 1 1 100%; overflow-x: auto; background: #0F1626; border-top: 1px solid #273252; margin: 8px -12px -8px; padding: 8px 12px; }
+    .tabs { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; background: #0F1626; border-top: 1px solid #273252; margin: 8px -12px -8px; padding: 8px 12px; }
     .app-name { font-size: 14px; }
     .tab { padding: 4px 8px; font-size: 11px; flex-shrink: 0; }
     .tab-badge { display: none; }
