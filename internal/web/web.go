@@ -477,10 +477,6 @@ send
 <span class="config-row-label">Workspace</span>
 <span class="config-row-value">` + html.EscapeString(s.workspace) + `</span>
 </div>
-<div class="config-row">
-<span class="config-row-label">Container</span>
-<span class="config-row-value">` + html.EscapeString(s.containerID) + `</span>
-</div>
 </div>
 </div>
 
