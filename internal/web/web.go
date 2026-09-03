@@ -258,6 +258,73 @@ send
 			msgFilter = "output"
 		}
 
+		// Render tool messages (may contain call + result)
+		if msg.Role == "tool" {
+			toolIcon := `<svg class="tool-icon" viewBox="0 0 14 14" fill="#22D3EE"><path d="M2.225 2.352q-.195.027-.321.174-.126.147-.147.352-.021.202.092.369.055.072 1.61 1.61l1.552 1.555-1.579 1.583q-1.066 1.063-1.326 1.336-.256.273-.301.342-.109.239-.014.465.099.222.321.321.226.096.465-.014.068-.044.376-.338.307-.294 1.818-1.822 1.863-1.89.055-.113.055-.26 0-.147-.055-.273-.031-.055-1.863-1.89-1.22-1.23-1.542-1.538-.321-.308-.376-.338-.167-.068-.352-.041zm4.635 8.162q-.126.027-.239.133-.109.106-.167.232-.068.209.014.427.085.215.294.314l.113.041 4.146.014q.53-.014.711-.027.126 0 .202-.041.079-.044.147-.12.072-.079.117-.161.161-.096.226.01.448-.082.226-.321.338l.082-.027-2.437-.014q-2.42 0-2.505.014zm-5.643 1.709q-.126.027-.239.133-.109.106-.167.232-.027.068-.027.181 0 .113 0 .629l0 .728.041.085q.044.068.126.154.085.082.161.126.079.041.246.041.167 0 .243-.041.079-.044.161-.126.085-.085.129-.154l.041-.085 0-.728q0-.516 0-.629 0-.113-.027-.181-.085-.198-.273-.301-.188-.106-.413-.065z"/></svg>`
+
+			// Split content by newline - first part is call, rest is result
+			parts := strings.SplitN(msg.Content, "\n", 2)
+			callLine := strings.TrimSpace(parts[0])
+			resultLine := ""
+			if len(parts) > 1 {
+				resultLine = strings.TrimSpace(parts[1])
+			}
+
+			// Format call line
+			if strings.HasPrefix(callLine, "$ ") {
+				callLine = callLine[2:]
+			}
+			// Parse JSON in call
+			if idx := strings.Index(callLine, "{"); idx >= 0 {
+				jsonPart := callLine[idx:]
+				var jsonData map[string]interface{}
+				if err := json.Unmarshal([]byte(jsonPart), &jsonData); err == nil {
+					var callParts []string
+					for k, v := range jsonData {
+						callParts = append(callParts, k+"="+fmt.Sprintf("%v", v))
+					}
+				callLine = callLine[:idx] + strings.Join(callParts, " ")
+				}
+			}
+			callHtml := html.EscapeString(callLine)
+
+			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call">%s<span class="tool-cmd">%s</span>`, toolIcon, callHtml))
+
+			// Format result if present
+			if resultLine != "" {
+				// Format ls output
+				if strings.Contains(resultLine, "total ") || strings.Contains(resultLine, "{total ") {
+					if strings.HasPrefix(resultLine, "{") { resultLine = resultLine[1:] }
+					if strings.HasSuffix(resultLine, "}") { resultLine = resultLine[:len(resultLine)-1] }
+					lines := strings.Split(resultLine, "\n")
+					var parts []string
+					for _, line := range lines {
+						fields := strings.Fields(line)
+						if len(fields) > 0 { parts = append(parts, fields[0]) }
+					}
+					resultLine = strings.Join(parts, " ")
+				}
+				// Strip braces from error
+				if strings.HasPrefix(resultLine, "{Error") && strings.HasSuffix(resultLine, "}") {
+					resultLine = resultLine[1 : len(resultLine)-1]
+				}
+
+				isError := strings.Contains(resultLine, "Error") || strings.Contains(resultLine, "error:")
+				resultHtml := html.EscapeString(resultLine)
+
+				if isError {
+					xIcon := `<svg class="tool-check" viewBox="0 0 14 14" fill="none" stroke="#f44336" stroke-width="2"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>`
+					sb.WriteString(fmt.Sprintf(`<span class="tool-result-error"> → %s</span><span class="tool-status">%s</span></div></div>`, resultHtml, xIcon))
+				} else {
+					checkIcon := `<svg class="tool-check" viewBox="0 0 14 14" fill="#34D399"><path d="M11.481 2.953q-.072.014-.13.058-.055.041-3.076 3.066l-3.025 3.008-1.289-1.289q-1.289-1.285-1.381-1.326-.089-.044-.222-.044-.133 0-.232.038-.096.034-.188.113-.089.075-.133.171-.027.072-.034.113-.007.041-.007.14l0 .041q-.014.113.041.198.072.109.366.403.195.212.967.981l1.497 1.483q.28.267.39.338.072.055.185.041l.096.014q.072 0 .14-.027.085-.072.321-.287.239-.219.8-.762l2.283-2.283q2.085-2.099 2.7-2.714.615-.619.646-.687.041-.085.041-.239 0-.099-.007-.14-.007-.041-.034-.113-.044-.082-.137-.164-.085-.085-.181-.12-.089-.037-.208-.037-.12 0-.188.027z"/></svg>`
+					sb.WriteString(fmt.Sprintf(`<span class="tool-result-ok"> → %s</span><span class="tool-status">%s</span></div></div>`, resultHtml, checkIcon))
+				}
+			} else {
+				sb.WriteString(`<span class="tool-status"></span></div></div>`)
+			}
+			continue
+		}
+
 		// Parse content for tool calls
 		lines := strings.Split(contentToShow, "\n")
 		var mainContent, toolLines []string

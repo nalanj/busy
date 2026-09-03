@@ -257,6 +257,7 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 					inputSummary = inputSummary[:100] + "..."
 				}
 				logTool(call.ToolName, inputSummary)
+				// Store as a single "tool" message; result will be appended to it
 				r.store.AddMessage(storage.Message{
 					Role:      "tool",
 					ToolName:  call.ToolName,
@@ -277,12 +278,25 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 					resultStr = resultStr[:200] + "..."
 				}
 				log("debug", "tool_result", resultStr)
-				r.store.AddMessage(storage.Message{
-					Role:      "tool_result",
-					ToolName:  result.ToolName,
-					Content:   resultStr,
-					Timestamp: time.Now(),
-				})
+				// Find the LAST tool message with matching name and append result
+				// This ensures we match the most recent tool call
+				msgs, err := r.store.GetMessages()
+				if err == nil {
+					var lastToolIdx = -1
+					for j := len(msgs) - 1; j >= 0; j-- {
+						if msgs[j].Role == "tool" && msgs[j].ToolName == result.ToolName {
+							lastToolIdx = j
+							break
+						}
+					}
+					if lastToolIdx >= 0 {
+						log("debug", "update_tool", fmt.Sprintf("appending result to tool idx %d", lastToolIdx))
+						msgs[lastToolIdx].Content = msgs[lastToolIdx].Content + "\n" + resultStr
+						r.store.UpdateMessage(msgs[lastToolIdx])
+					} else {
+						log("debug", "update_tool", fmt.Sprintf("no matching tool found for %s", result.ToolName))
+					}
+				}
 				if r.sse != nil {
 					r.sse.Emit("tool_result", map[string]string{
 						"tool":    result.ToolName,

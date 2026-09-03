@@ -139,6 +139,50 @@ func (s *Store) AddMessage(msg Message) error {
 	return nil
 }
 
+// UpdateMessage updates an existing message in the session
+func (s *Store) UpdateMessage(msg Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sessionNum, err := s.currentSession()
+	if err != nil || sessionNum == 0 {
+		return fmt.Errorf("no session found")
+	}
+
+	path := s.sessionPath(sessionNum)
+
+	// Read all messages
+	messages, err := s.readSession(path)
+	if err != nil {
+		return err
+	}
+
+	// Find and update the message with matching ID
+	for i, m := range messages {
+		if m.ID == msg.ID {
+			messages[i] = msg
+			break
+		}
+	}
+
+	// Rewrite the session file
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("creating session file: %w", err)
+	}
+	defer f.Close()
+
+	for _, m := range messages {
+		data, err := json.Marshal(m)
+		if err != nil {
+			continue
+		}
+		f.Write(append(data, '\n'))
+	}
+
+	return nil
+}
+
 // getLastMessageID reads the last message ID from a session file
 func (s *Store) getLastMessageID(path string) string {
 	f, err := os.Open(path)

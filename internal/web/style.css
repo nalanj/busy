@@ -80,6 +80,8 @@ html, body {
 .tool-call { display: flex; align-items: center; gap: 10px; background: #0F1626; border: 1px solid #273252; border-radius: 8px; padding: 8px 12px; margin: 4px 0; }
 .tool-icon { width: 13px; height: 13px; flex-shrink: 0; color: #22D3EE; }
 .tool-cmd { flex: 1; color: #E6EAF5; font-size: 12px; word-break: break-all; }
+.tool-result-ok { color: #34D399; font-size: 12px; margin-left: 8px; }
+.tool-result-error { color: #f44336; font-size: 12px; margin-left: 8px; }
 .tool-status { display: flex; align-items: center; gap: 6px; }
 .tool-check { width: 13px; height: 13px; color: #34D399; }
 .statusbar { height: 30px; border-top: 1px solid #273252; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: #141B2E; flex-shrink: 0; }
