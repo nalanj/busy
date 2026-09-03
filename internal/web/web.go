@@ -26,6 +26,7 @@ type Server struct {
 	doneToken     string
 	workspace     string
 	containerID   string
+	jobs          []string
 	sseHub        *SSEHub
 	webMsgJobs    []queue.WebMessageJob
 	webMsgEmitter func(job queue.Job)
@@ -59,6 +60,10 @@ func (s *Server) SetWorkspace(path string) {
 
 func (s *Server) SetContainerID(id string) {
 	s.containerID = id
+}
+
+func (s *Server) SetJobs(jobs []string) {
+	s.jobs = jobs
 }
 
 func (s *Server) SetWebMessageJobs(jobs []queue.WebMessageJob, emitter func(queue.Job)) {
@@ -477,6 +482,22 @@ send
 <span class="config-row-label">Workspace</span>
 <span class="config-row-value">` + html.EscapeString(s.workspace) + `</span>
 </div>
+</div>
+</div>
+
+<div class="config-section">
+<span class="config-section-label">JOBS</span>
+<div class="config-card">
+` + func() string {
+		if len(s.jobs) == 0 {
+			return `<div class="config-row"><span class="config-row-value">No jobs defined</span></div>`
+		}
+		var sb strings.Builder
+		for _, job := range s.jobs {
+			sb.WriteString(fmt.Sprintf(`<div class="config-row"><span class="config-row-value">%s</span></div>`, html.EscapeString(job)))
+		}
+		return sb.String()
+	}() + `
 </div>
 </div>
 

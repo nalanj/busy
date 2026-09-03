@@ -104,6 +104,13 @@ func main() {
 		}
 		server.SetContainerID(containerID)
 
+		// Pass job names to server
+		var jobNames []string
+		for _, job := range cfg.Jobs {
+			jobNames = append(jobNames, job.Name+": "+job.Schedule)
+		}
+		server.SetJobs(jobNames)
+
 		// Configure web-message jobs
 		var webMsgJobs []queue.WebMessageJob
 		for _, job := range cfg.Jobs {
