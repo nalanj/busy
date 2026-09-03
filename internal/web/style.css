@@ -150,8 +150,8 @@ html, body {
 .live-message { animation: fadeIn 0.3s ease-in; }
 @media (max-width: 525px) {
     .filter-label { display: none; }
-    #send-btn { font-size: 0; padding: 6px; }
-    #send-btn svg { margin: 0; }
+    #send-btn { font-size: 11px; padding: 6px 12px; }
+    #send-btn svg { display: none; }
 }
 @media (max-width: 460px) {
     .main { flex: 1 1 auto; min-height: 0; overflow: hidden; }
