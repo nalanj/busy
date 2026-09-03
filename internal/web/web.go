@@ -485,7 +485,7 @@ send
 </div>
 </div>
 
-<div class="config-section">
+<div class="config-section" style="padding-top: 16px;">
 <span class="config-section-label">JOBS</span>
 <div class="config-card">
 ` + func() string {
