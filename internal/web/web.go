@@ -195,9 +195,9 @@ func (s *Server) renderHTML(meta *storage.Metadata, messages []storage.Message, 
 <div class="live-badge"><div class="live-dot" id="sse-dot"></div><span class="live-text" id="sse-text">LIVE</span></div>
 </div>
 <div class="tabs">
-<button class="tab active" data-tab="log">Log</button>
-<button class="tab" data-tab="queue">Queue <span class="tab-badge" id="queue-badge">` + fmt.Sprintf("%d", queueLen) + `</span></button>
-<button class="tab" data-tab="config">Config</button>
+<button class="tab active" data-tab="log">Log
+<button class="tab" data-tab="queue">Queue <span class="tab-badge" id="queue-badge">` + fmt.Sprintf("%d", queueLen) + `</span>
+<button class="tab" data-tab="config">Config
 </div>
 </div>
 <div class="content">
@@ -208,10 +208,10 @@ func (s *Server) renderHTML(meta *storage.Metadata, messages []storage.Message, 
 <div class="feed-header">
 <div class="feed-filters">
 <span class="filter-label">EVENT LOG</span>
-<button class="filter-chip active">all</button>
-<button class="filter-chip">context</button>
-<button class="filter-chip">tools</button>
-<button class="filter-chip">output</button>
+<button class="filter-chip active">all
+<button class="filter-chip">context
+<button class="filter-chip">tools
+<button class="filter-chip">output
 </div>
 `)
 
@@ -219,7 +219,7 @@ func (s *Server) renderHTML(meta *storage.Metadata, messages []storage.Message, 
 		sb.WriteString(`<button class="send-btn" id="send-btn">
 <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><path d="M2.198 1.764q-.14.041-.26.154-.12.113-.161.253-.027.099-.027 2.242 0 2.14.027 2.379.085.588.373 1.094.287.502.776.865.561.434 1.316.547.113.027.646.027l5.373 0-1.008 1.008q-.711.728-.868.889-.154.161-.181.232-.068.209.014.427.085.215.28.314.099.041.253.041l.041 0q.113.014.198-.041.109-.072.403-.366.226-.209.995-.981l.239-.236q.95-.954 1.251-1.261.304-.308.332-.362.041-.099.041-.239 0-.14-.055-.24-.055-.14-.317-.355-.301-.301-1.237-1.244-.937-.947-1.261-1.254-.321-.308-.387-.342-.062-.038-.103-.044-.041-.007-.14-.007-.154 0-.253.041-.195.099-.28.318-.082.215-.014.424.027.072.181.232.157.161.868.889l1.008 1.008-2.813 0q-2.813 0-2.967-.027-.574-.072-.995-.448-.42-.379-.533-.94-.027-.109-.027-.448l0-3.415q-.014-.475-.027-.646-.014-.109-.051-.185-.034-.079-.113-.147-.075-.072-.154-.106-.075-.038-.188-.051-.109-.014-.195 0z"/></svg>
 send
-</button>`)
+`)
 	}
 
 	sb.WriteString(`</div>
@@ -458,11 +458,11 @@ send
 		sb.WriteString(`<div class="prompt-text secondary">No system prompt configured</div>`)
 	}
 
-	sb.WriteString(`<div class="prompt-card-footer">
-<button class="action-btn" id="edit-prompt">
+	sb.WriteString(`
+
 <svg viewBox="0 0 14 14" fill="currentColor"><path d="M11.002 0.602q-.615.041-1.145.434-.154.099-4.132 4.088-3.975 3.989-4.088 4.129-.14.198-.232.458-.089.256-.448 1.463-.355 1.203-.369 1.285-.014.126.021.273.034.147.089.246.058.099.171.205.113.103.208.147.099.041.226.068.126.027.229.014.106-.014 1.381-.393l1.248-.39q.263-.085.362-.126l.014-.014q.14-.072.321-.226.253-.239 1.08-1.049l2.926-2.926q3.989-3.992 4.102-4.146.181-.25.294-.516.239-.602.12-1.23-.12-.632-.567-1.107-.352-.366-.813-.547-.461-.181-.995-.14z m.42 1.176q.28.058.509.291.232.229.291.509.082.376-.085.714-.041.082-.133.181-.089.096-.427.448l-.502.502-1.497-1.497.502-.502q.352-.338.448-.427.099-.092.181-.133.338-.167.714-.085z m-4.242 6.539q-3.08 3.08-3.145 3.117-.062.034-1.084.349-1.022.314-1.036.308-.014-.007.294-1.029.308-1.022.335-1.07.031-.051 3.124-3.158l3.093-3.093 1.483 1.497-3.066 3.08z"/></svg>
 edit
-</button>
+
 </div>
 </div>
 </div>
@@ -495,11 +495,11 @@ edit
 <button class="session-btn" id="restart-session">
 <svg viewBox="0 0 14 14" fill="currentColor"><path d="M1.596 1.189q-.253.085-.379.308l-.041.085 0 3.261.041.072q.099.195.294.28l.085.041 2.813.014q.321-.014.434-.027.072-.014.154-.072l.014-.014q.171-.126.219-.314.048-.188-.031-.376-.075-.191-.256-.287-.085-.058-.267-.072-.181-.014-.769-.014l-.742 0 .236-.226q.742-.728 1.583-1.09.967-.42 2.03-.42.94 0 1.764.349 1.176.492 1.938 1.494.766 1.001.919 2.246.027.226.027.567 0 .342-.027.567-.154 1.275-.94 2.29-.783 1.012-1.972 1.49-.813.321-1.723.321-.28 0-.461-.014-.181-.014-.461-.072-.882-.181-1.647-.684-.762-.506-1.282-1.254-.516-.749-.711-1.644-.085-.448-.092-.776-.007-.332-.075-.472-.085-.167-.267-.267-.058-.027-.099-.041-.041-.014-.154-.014-.113 0-.154.014-.041.014-.099.041-.181.099-.28.267-.068.154-.034.653.034.496.147.988.294 1.189 1.036 2.157.742.964 1.805 1.559 1.066.595 2.297.708.185.014.533.014.349 0 .533-.014 1.384-.126 2.546-.868 1.148-.714 1.863-1.863.742-1.162.868-2.546.014-.185.014-.533 0-.349-.014-.533-.14-1.524-1.015-2.782-.875-1.261-2.263-1.935-.588-.28-1.148-.42-.557-.14-1.217-.154-1.09-.027-2.112.308-.714.239-1.302.605-.588.362-1.148.909l-.28.263 0-1.678-.041-.085q-.099-.181-.28-.267-.085-.041-.226-.048-.14-.007-.181.007z"/></svg>
 restart session
-</button>
+
 <button class="session-btn" id="export-log">
 <svg viewBox="0 0 14 14" fill="currentColor"><path d="M6.846 1.189q-.253.085-.379.308l-.041.085 0 5.752-.995-.995q-.629-.629-.834-.817-.202-.188-.256-.219-.198-.082-.4-.024-.202.055-.328.215-.126.161-.113.369l0 .027q.014.113.068.198.072.113.366.42l1.203 1.203q1.528 1.524 1.596 1.569.058.027.106.034.048.007.161.007.113 0 .161-.007.048-.007.106-.034.068-.044 1.596-1.569 1.036-1.036 1.285-1.302.253-.267.297-.335.096-.226.01-.448-.082-.226-.321-.338-.082-.027-.222-.027l-.027 0q-.126 0-.198.027-.096.058-.308.253-.154.154-.697.701l-1.107 1.09 0-5.752-.041-.085q-.099-.181-.28-.267-.085-.041-.226-.048-.14-.007-.181.007z m-5.25 7q-.253.085-.379.308l-.041.085.014 2.604q0 .236.027.308.14.489.468.82.332.328.82.468.085.027.714.027l3.78.014 3.78-.014q.629 0 .714-.027.489-.14.817-.468.332-.332.472-.82.027-.072.027-.308l.014-2.604-.041-.085q-.099-.167-.28-.267-.058-.027-.099-.041-.041-.014-.154-.014-.113 0-.154.014-.041.014-.099.041-.181.099-.28.267l-.041.085-.014 2.632-.041.099q-.14.277-.434.335-.099.027-4.187.027-4.088 0-4.187-.027-.294-.058-.434-.335l-.041-.099-.014-2.632-.041-.085q-.099-.181-.28-.267-.085-.041-.226-.048-.14-.007-.181.007z"/></svg>
 export log
-</button>
+
 </div>
 </div>
 </div>
@@ -531,8 +531,8 @@ export log
 <form id="msg-form">
 <textarea id="msg-input" placeholder="Type your message..."></textarea>
 <div class="modal-actions">
-<button type="button" class="modal-btn modal-btn-secondary" id="close-modal">Cancel</button>
-<button type="submit" class="modal-btn modal-btn-primary">Send</button>
+<button type="button" class="modal-btn modal-btn-secondary" id="close-modal">Cancel
+<button type="submit" class="modal-btn modal-btn-primary">Send
 </div>
 </form>
 </div>
@@ -544,8 +544,8 @@ export log
 <form id="prompt-form">
 <textarea id="prompt-input" placeholder="Enter system prompt..."></textarea>
 <div class="modal-actions">
-<button type="button" class="modal-btn modal-btn-secondary" id="close-prompt">Cancel</button>
-<button type="submit" class="modal-btn modal-btn-primary">Save</button>
+<button type="button" class="modal-btn modal-btn-secondary" id="close-prompt">Cancel
+<button type="submit" class="modal-btn modal-btn-primary">Save
 </div>
 </form>
 </div>
