@@ -745,6 +745,45 @@ function connectSSE() {
         msg.scrollIntoView({ behavior: 'smooth' });
     });
 
+    events.addEventListener('tool_result', (e) => {
+        const data = JSON.parse(e.data);
+        const toolResult = data.content && data.content.content || '';
+        const toolName = data.content && data.content.tool || '';
+        // Find the last tool-call div and update it with expandable result
+        const toolCalls = document.querySelectorAll('.tool-call');
+        if (toolCalls.length > 0) {
+            const lastToolCall = toolCalls[toolCalls.length - 1];
+            // Check if it already has a toggle (already updated)
+            if (!lastToolCall.querySelector('.tool-toggle')) {
+                const statusSpan = lastToolCall.querySelector('.tool-status');
+                const statusIcon = statusSpan ? statusSpan.innerHTML : '';
+                const isError = toolResult.includes('Error') || toolResult.includes('error:');
+                // Create summary (truncated)
+                let summary = toolResult;
+                if (summary.length > 60) {
+                    summary = summary.substring(0, 60) + '...';
+                }
+                summary = escapeHtml(summary).replace(/\n/g, ' ');
+                // Color code output
+                const lines = toolResult.split('\n');
+                let outputHtml = '';
+                for (const line of lines) {
+                    const escapedLine = escapeHtml(line);
+                    if (line.startsWith('Error:') || line.startsWith('stderr:') || line.includes('Permission denied') || line.includes('No such file')) {
+                        outputHtml += '<span class="tool-stderr">' + escapedLine + '</span>\n';
+                    } else {
+                        outputHtml += '<span class="tool-stdout">' + escapedLine + '</span>\n';
+                    }
+                }
+                // Update the tool call HTML
+                lastToolCall.innerHTML = lastToolCall.innerHTML.replace(
+                    '<span class="tool-cmd">' + escapeHtml(toolName + ' ' + (data.content && data.content.content || '')) + '</span><span class="tool-status">',
+                    '<span class="tool-cmd">' + escapeHtml(toolName + ' ' + (data.content && data.content.content || '')) + '</span><span class="tool-toggle" onclick="toggleToolOutput(this)">▶</span><span class="tool-summary">' + summary + '</span></div><div class="tool-output" style="display:none">' + outputHtml
+                );
+            }
+        }
+    });
+
     events.addEventListener('error', (e) => {
         const data = JSON.parse(e.data);
         const msg = document.createElement('div');
