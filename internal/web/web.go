@@ -473,7 +473,6 @@ send
 
 <div class="config-section">
 <span class="config-section-label">CONFIGURATION</span>
-<div class="config-card">
 <div class="config-row">
 <span class="config-row-label">Model</span>
 <span class="config-row-value">` + html.EscapeString(s.modelName) + `</span>
@@ -487,22 +486,19 @@ send
 <span class="config-row-value">` + html.EscapeString(s.workspace) + `</span>
 </div>
 </div>
-</div>
 
 <div class="config-section" style="padding-top: 16px;">
 <span class="config-section-label">JOBS</span>
-<div class="config-card">
 ` + func() string {
 		if len(s.jobs) == 0 {
-			return `<div>No jobs defined</div>`
+			return `<div style="color: #8B94AD; font-size: 12px;">No jobs defined</div>`
 		}
 		var sb strings.Builder
 		for _, job := range s.jobs {
-			sb.WriteString(fmt.Sprintf(`<div style="padding: 13px 16px; border-bottom: 1px solid #273252;"><div style="color: #22D3EE; font-size: 12px; margin-bottom: 4px;">%s</div><div style="color: #8B94AD; font-size: 10px; margin-bottom: 6px;">%s</div><div style="color: #E6EAF5; font-size: 11px; white-space: pre-wrap; word-break: break-all;">%s</div></div>`, html.EscapeString(job.Name), html.EscapeString(job.Schedule), html.EscapeString(job.Prompt)))
+			sb.WriteString(fmt.Sprintf(`<div style="margin-bottom: 16px;"><div style="color: #22D3EE; font-size: 12px; margin-bottom: 4px;">%s</div><div style="color: #8B94AD; font-size: 10px; margin-bottom: 6px;">%s</div><div style="color: #E6EAF5; font-size: 12px; white-space: pre-wrap; word-break: break-word;">%s</div></div>`, html.EscapeString(job.Name), html.EscapeString(job.Schedule), html.EscapeString(job.Prompt)))
 		}
 		return sb.String()
 	}() + `
-</div>
 </div>
 
 </div>
