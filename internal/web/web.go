@@ -563,6 +563,17 @@ const closePrompt = document.getElementById('close-prompt');
 const promptForm = document.getElementById('prompt-form');
 const promptInput = document.getElementById('prompt-input');
 
+// Set active tab based on URL on page load
+(function() {
+    const path = window.location.pathname.slice(1) || 'log';
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const tab = document.querySelector('.tab[data-tab="' + path + '"]');
+    if (tab) tab.classList.add('active');
+    const panel = document.getElementById('panel-' + path);
+    if (panel) panel.classList.add('active');
+})();
+
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
