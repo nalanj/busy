@@ -192,8 +192,8 @@ func (s *Server) renderHTML(meta *storage.Metadata, messages []storage.Message, 
 <svg viewBox="0 0 14 14" fill="#22D3EE"><path d="M4.522 1.764q-.14.041-.267.167-.167.154-.174.373-.007.215.126.386.133.167.355.222.099.014.981.014l.882 0 0 1.148-1.429 0q-1.104 0-1.449.014-.342.014-.496.055-.434.126-.749.42-.314.294-.455.714-.072.198-.085.4-.014.202-.014.96l0 .937-.349 0q-.267.014-.332.021-.062.007-.133.048-.236.099-.321.338-.082.236.027.461.044.068.12.14.079.068.154.106.078.034.14.041.065.007.332.021l.362 0 0 1.791q.014.167.027.294.099.448.379.786.28.335.701.502.154.058.308.099.126.014.643.027l3.192 0 3.192 0q.516-.014.643-.041.533-.099.902-.468.373-.373.485-.906.014-.126.027-.294l0-1.791.362 0q.267-.014.328-.021.065-.007.14-.041.079-.038.154-.106.079-.072.113-.14.038-.072.051-.181.041-.198-.051-.366-.089-.167-.284-.266-.072-.027-.137-.034-.062-.007-.328-.021l-.349 0 0-.937q0-.759-.014-.96-.014-.202-.085-.4-.14-.42-.455-.714-.314-.294-.749-.42-.154-.041-.499-.055-.342-.014-1.446-.014l-1.429 0 0-.923q0-.673 0-.813 0-.14-.027-.209-.085-.212-.294-.325-.326l-.099-.041-1.289-.014q-1.275 0-1.343.014zm6.231 3.541q.209.113.294.325.027.068.027.39l0 4.648-.055.085q-.099.181-.267.28l-.085.041-7.335 0-.085-.041-.267-.28-.055-.085 0-4.635q0-.335.027-.403.058-.126.167-.232.113-.106.239-.133.085-.014 3.681-.014l3.613.014.099.041z"/></svg>
 </div>
 <span class="app-name">` + html.EscapeString(s.agentName) + `</span>
-</div>
 <div class="live-badge"><div class="live-dot" id="sse-dot"></div><span class="live-text" id="sse-text">LIVE</span></div>
+</div>
 <div class="tabs">
 <button class="tab active" data-tab="log">Log</button>
 <button class="tab" data-tab="queue">Queue <span class="tab-badge" id="queue-badge">` + fmt.Sprintf("%d", queueLen) + `</span></button>
@@ -205,7 +205,6 @@ func (s *Server) renderHTML(meta *storage.Metadata, messages []storage.Message, 
 
 	// Log tab
 	sb.WriteString(`<div class="tab-panel active" id="panel-log">
-<div class="feed">
 <div class="feed-header">
 <div class="feed-filters">
 <span class="filter-label">EVENT LOG</span>
@@ -224,6 +223,7 @@ send message
 	}
 
 	sb.WriteString(`</div>
+<div class="feed">
 <div id="messages-container">
 `)
 
