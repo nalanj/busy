@@ -128,8 +128,8 @@ html, body {
 .action-btn { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #273252; border-radius: 8px; cursor: pointer; color: #8B94AD; font-size: 11px; background: transparent; font-family: inherit; }
 .action-btn:hover { border-color: #22D3EE; color: #22D3EE; }
 .action-btn svg { width: 12px; height: 12px; }
-.config-card { background: #141B2E; border: 1px solid #273252; border-radius: 12px; overflow: hidden; }
-.config-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; }
+.config-card { background: #141B2E; border: 1px solid #273252; border-radius: 12px; overflow: hidden; padding: 16px; }
+.config-row { display: flex; align-items: center; justify-content: space-between; }
 .config-row:not(:last-child) { border-bottom: 1px solid #273252; }
 .config-row-label { color: #8B94AD; font-size: 12px; }
 .config-row-value { color: #E6EAF5; font-size: 12px; word-break: break-all; }

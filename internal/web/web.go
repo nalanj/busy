@@ -494,11 +494,11 @@ send
 <div class="config-card">
 ` + func() string {
 		if len(s.jobs) == 0 {
-			return `<div class="config-row"><span class="config-row-value">No jobs defined</span></div>`
+			return `<div>No jobs defined</div>`
 		}
 		var sb strings.Builder
 		for _, job := range s.jobs {
-			sb.WriteString(fmt.Sprintf(`<div class="config-row" style="flex-direction: column; gap: 4px;"><span class="config-row-label" style="color: #22D3EE;">%s</span><span class="config-row-value" style="color: #8B94AD; font-size: 10px;">%s</span><span class="config-row-value" style="font-size: 11px; white-space: pre-wrap;">%s</span></div>`, html.EscapeString(job.Name), html.EscapeString(job.Schedule), html.EscapeString(job.Prompt)))
+			sb.WriteString(fmt.Sprintf(`<div style="padding: 13px 16px; border-bottom: 1px solid #273252;"><div style="color: #22D3EE; font-size: 12px; margin-bottom: 4px;">%s</div><div style="color: #8B94AD; font-size: 10px; margin-bottom: 6px;">%s</div><div style="color: #E6EAF5; font-size: 11px; white-space: pre-wrap; word-break: break-all;">%s</div></div>`, html.EscapeString(job.Name), html.EscapeString(job.Schedule), html.EscapeString(job.Prompt)))
 		}
 		return sb.String()
 	}() + `
