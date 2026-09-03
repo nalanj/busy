@@ -265,9 +265,9 @@ send
 			// Split content by newline - first part is call, rest is result
 			parts := strings.SplitN(msg.Content, "\n", 2)
 			callLine := strings.TrimSpace(parts[0])
-			resultLine := ""
+			fullResult := ""
 			if len(parts) > 1 {
-				resultLine = strings.TrimSpace(parts[1])
+				fullResult = parts[1]
 			}
 
 			// Format call line
@@ -288,39 +288,73 @@ send
 			}
 			callHtml := html.EscapeString(callLine)
 
+			// Generate summary and full output HTML
+			var summaryHtml, fullOutputHtml string
+			isError := false
+			hasStderr := false
+			showExpand := false
+
+			if fullResult != "" {
+				showExpand = true
+				// Clean up result (remove braces if present)
+				resultClean := strings.TrimSpace(fullResult)
+				if strings.HasPrefix(resultClean, "{") && strings.HasSuffix(resultClean, "}") {
+					resultClean = resultClean[1 : len(resultClean)-1]
+				}
+
+				// Check if it's an error
+				isError = strings.Contains(resultClean, "Error") || strings.Contains(resultClean, "error:")
+
+				// Check for stderr markers
+				hasStderr = strings.Contains(resultClean, "stderr:") || strings.Contains(resultClean, "2>")
+
+				// Generate full output with color coding
+				var outputLines []string
+				for _, line := range strings.Split(resultClean, "\n") {
+					escapedLine := html.EscapeString(line)
+					// Color stderr lines (typically start with stderr: or contain error indicators)
+					if strings.HasPrefix(line, "stderr:") || strings.HasPrefix(line, "Error:") || strings.HasPrefix(strings.ToLower(line), "error:") {
+						outputLines = append(outputLines, `<span class="tool-stderr">`+escapedLine+`</span>`)
+					} else if strings.Contains(line, "Permission denied") || strings.Contains(line, "cannot access") || strings.Contains(line, "No such file") {
+						outputLines = append(outputLines, `<span class="tool-stderr">`+escapedLine+`</span>`)
+					} else {
+						outputLines = append(outputLines, `<span class="tool-stdout">`+escapedLine+`</span>`)
+					}
+				}
+				fullOutputHtml = strings.Join(outputLines, "\n")
+
+				// Create summary (truncated)
+				if len(resultClean) > 60 {
+					summaryHtml = html.EscapeString(resultClean[:60]) + "..."
+				} else {
+					summaryHtml = html.EscapeString(resultClean)
+				}
+			}
+
+			// Determine status icon
+			var statusIcon, statusClass string
+			if isError || hasStderr {
+				statusIcon = `<svg class="tool-check" viewBox="0 0 14 14" fill="none" stroke="#f44336" stroke-width="2"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>`
+				statusClass = "tool-status-error"
+			} else if fullResult != "" {
+				statusIcon = `<svg class="tool-check" viewBox="0 0 14 14" fill="#34D399"><path d="M11.481 2.953q-.072.014-.13.058-.055.041-3.076 3.066l-3.025 3.008-1.289-1.289q-1.289-1.285-1.381-1.326-.089-.044-.222-.044-.133 0-.232.038-.096.034-.188.113-.089.075-.133.171-.027.072-.034.113-.007.041-.007.14l0 .041q-.014.113.041.198.072.109.366.403.195.212.967.981l1.497 1.483q.28.267.39.338.072.055.185.041l.096.014q.072 0 .14-.027.085-.072.321-.287.239-.219.8-.762l2.283-2.283q2.085-2.099 2.7-2.714.615-.619.646-.687.041-.085.041-.239 0-.099-.007-.14-.007-.041-.034-.113-.044-.082-.137-.164-.085-.085-.181-.12-.089-.037-.208-.037-.12 0-.188.027z"/></svg>`
+				statusClass = "tool-status-ok"
+			} else {
+				statusIcon = ""
+				statusClass = ""
+			}
+
+			// Build the HTML
 			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call">%s<span class="tool-cmd">%s</span>`, toolIcon, callHtml))
 
-			// Format result if present
-			if resultLine != "" {
-				// Format ls output
-				if strings.Contains(resultLine, "total ") || strings.Contains(resultLine, "{total ") {
-					if strings.HasPrefix(resultLine, "{") { resultLine = resultLine[1:] }
-					if strings.HasSuffix(resultLine, "}") { resultLine = resultLine[:len(resultLine)-1] }
-					lines := strings.Split(resultLine, "\n")
-					var parts []string
-					for _, line := range lines {
-						fields := strings.Fields(line)
-						if len(fields) > 0 { parts = append(parts, fields[0]) }
-					}
-					resultLine = strings.Join(parts, " ")
-				}
-				// Strip braces from error
-				if strings.HasPrefix(resultLine, "{Error") && strings.HasSuffix(resultLine, "}") {
-					resultLine = resultLine[1 : len(resultLine)-1]
-				}
-
-				isError := strings.Contains(resultLine, "Error") || strings.Contains(resultLine, "error:")
-				resultHtml := html.EscapeString(resultLine)
-
-				if isError {
-					xIcon := `<svg class="tool-check" viewBox="0 0 14 14" fill="none" stroke="#f44336" stroke-width="2"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>`
-					sb.WriteString(fmt.Sprintf(`<span class="tool-result-error"> → %s</span><span class="tool-status">%s</span></div></div>`, resultHtml, xIcon))
+			if fullResult != "" {
+				if showExpand {
+					sb.WriteString(fmt.Sprintf(`<span class="tool-toggle" onclick="toggleToolOutput(this)">▶</span><span class="tool-summary">%s</span></div><div class="tool-output" style="display:none">%s</div></div>`, summaryHtml, fullOutputHtml))
 				} else {
-					checkIcon := `<svg class="tool-check" viewBox="0 0 14 14" fill="#34D399"><path d="M11.481 2.953q-.072.014-.13.058-.055.041-3.076 3.066l-3.025 3.008-1.289-1.289q-1.289-1.285-1.381-1.326-.089-.044-.222-.044-.133 0-.232.038-.096.034-.188.113-.089.075-.133.171-.027.072-.034.113-.007.041-.007.14l0 .041q-.014.113.041.198.072.109.366.403.195.212.967.981l1.497 1.483q.28.267.39.338.072.055.185.041l.096.014q.072 0 .14-.027.085-.072.321-.287.239-.219.8-.762l2.283-2.283q2.085-2.099 2.7-2.714.615-.619.646-.687.041-.085.041-.239 0-.099-.007-.14-.007-.041-.034-.113-.044-.082-.137-.164-.085-.085-.181-.12-.089-.037-.208-.037-.12 0-.188.027z"/></svg>`
-					sb.WriteString(fmt.Sprintf(`<span class="tool-result-ok"> → %s</span><span class="tool-status">%s</span></div></div>`, resultHtml, checkIcon))
+					sb.WriteString(fmt.Sprintf(`<span class="tool-result"> → %s</span><span class="%s">%s</span></div></div>`, summaryHtml, statusClass, statusIcon))
 				}
 			} else {
-				sb.WriteString(`<span class="tool-status"></span></div></div>`)
+				sb.WriteString(fmt.Sprintf(`<span class="%s">%s</span></div></div>`, statusClass, statusIcon))
 			}
 			continue
 		}
@@ -741,6 +775,22 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function toggleToolOutput(el) {
+    const toolCall = el.closest('.tool-call');
+    const output = toolCall.nextElementSibling;
+    if (output && output.classList.contains('tool-output')) {
+        if (output.style.display === 'none') {
+            output.style.display = 'block';
+            el.classList.add('expanded');
+            el.textContent = '▼';
+        } else {
+            output.style.display = 'none';
+            el.classList.remove('expanded');
+            el.textContent = '▶';
+        }
+    }
 }
 
 connectSSE();

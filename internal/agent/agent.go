@@ -274,12 +274,9 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			},
 			OnToolResult: func(result fantasy.ToolResultContent) error {
 				resultStr := fmt.Sprintf("%v", result.Result)
-				if len(resultStr) > 200 {
-					resultStr = resultStr[:200] + "..."
-				}
 				log("debug", "tool_result", resultStr)
 				// Find the LAST tool message with matching name and append result
-				// This ensures we match the most recent tool call
+				// Store the full result for later expansion
 				msgs, err := r.store.GetMessages()
 				if err == nil {
 					var lastToolIdx = -1
@@ -293,6 +290,10 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 						msgs[lastToolIdx].Content = msgs[lastToolIdx].Content + "\n" + resultStr
 						r.store.UpdateMessage(msgs[lastToolIdx])
 					}
+				}
+				// Truncate for SSE only
+				if len(resultStr) > 200 {
+					resultStr = resultStr[:200] + "..."
 				}
 				if r.sse != nil {
 					r.sse.Emit("tool_result", map[string]string{
