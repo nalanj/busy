@@ -534,6 +534,9 @@ const promptInput = document.getElementById('prompt-input');
     if (tab) tab.classList.add('active');
     const panel = document.getElementById('panel-' + path);
     if (panel) panel.classList.add('active');
+    // Scroll to bottom of feed on load
+    const feed = document.querySelector('.feed');
+    if (feed) feed.scrollTop = feed.scrollHeight;
 })();
 
 // Tab switching
