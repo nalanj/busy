@@ -82,14 +82,15 @@ html, body {
 .tool-cmd { flex: 1; color: #E6EAF5; font-size: 12px; word-break: break-all; }
 .tool-result-ok { color: #34D399; font-size: 12px; margin-left: 8px; }
 .tool-result-error { color: #f44336; font-size: 12px; margin-left: 8px; }
-.tool-toggle { cursor: pointer; color: #22D3EE; margin-left: 6px; font-size: 10px; user-select: none; }
-.tool-summary { color: #8B94AD; font-size: 11px; margin-left: 4px; }
+.tool-toggle { cursor: pointer; color: #22D3EE; margin-left: 8px; font-size: 10px; user-select: none; flex-shrink: 0; }
+.tool-summary { color: #8B94AD; font-size: 11px; margin-left: 8px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-output { padding: 8px 12px; background: #0a0f1a; border-radius: 0 0 6px 6px; margin-top: 4px; font-family: monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
 .tool-stdout { color: #34D399; }
 .tool-stderr { color: #f44336; }
 .tool-status-ok { display: none; }
 .tool-status-error { display: none; }
-.tool-toggle.expanded { transform: rotate(90deg); }
+.tool-call { cursor: pointer; }
+.tool-call:hover { background: #1B2440; }
 .tool-status { display: flex; align-items: center; gap: 6px; }
 .tool-check { width: 13px; height: 13px; color: #34D399; }
 .statusbar { height: 30px; border-top: 1px solid #273252; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: #141B2E; flex-shrink: 0; }

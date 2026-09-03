@@ -290,9 +290,7 @@ send
 
 			// Generate summary and full output HTML
 			var summaryHtml, fullOutputHtml string
-			isError := false
-			hasStderr := false
-			showExpand := false
+			var showExpand bool
 
 			if fullResult != "" {
 				showExpand = true
@@ -301,12 +299,6 @@ send
 				if strings.HasPrefix(resultClean, "{") && strings.HasSuffix(resultClean, "}") {
 					resultClean = resultClean[1 : len(resultClean)-1]
 				}
-
-				// Check if it's an error
-				isError = strings.Contains(resultClean, "Error") || strings.Contains(resultClean, "error:")
-
-				// Check for stderr markers
-				hasStderr = strings.Contains(resultClean, "stderr:") || strings.Contains(resultClean, "2>")
 
 				// Generate full output with color coding
 				var outputLines []string
@@ -331,30 +323,17 @@ send
 				}
 			}
 
-			// Determine status icon
-			var statusIcon, statusClass string
-			if isError || hasStderr {
-				statusIcon = `<svg class="tool-check" viewBox="0 0 14 14" fill="none" stroke="#f44336" stroke-width="2"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>`
-				statusClass = "tool-status-error"
-			} else if fullResult != "" {
-				statusIcon = `<svg class="tool-check" viewBox="0 0 14 14" fill="#34D399"><path d="M11.481 2.953q-.072.014-.13.058-.055.041-3.076 3.066l-3.025 3.008-1.289-1.289q-1.289-1.285-1.381-1.326-.089-.044-.222-.044-.133 0-.232.038-.096.034-.188.113-.089.075-.133.171-.027.072-.034.113-.007.041-.007.14l0 .041q-.014.113.041.198.072.109.366.403.195.212.967.981l1.497 1.483q.28.267.39.338.072.055.185.041l.096.014q.072 0 .14-.027.085-.072.321-.287.239-.219.8-.762l2.283-2.283q2.085-2.099 2.7-2.714.615-.619.646-.687.041-.085.041-.239 0-.099-.007-.14-.007-.041-.034-.113-.044-.082-.137-.164-.085-.085-.181-.12-.089-.037-.208-.037-.12 0-.188.027z"/></svg>`
-				statusClass = "tool-status-ok"
-			} else {
-				statusIcon = ""
-				statusClass = ""
-			}
-
 			// Build the HTML
-			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call">%s<span class="tool-cmd">%s</span>`, toolIcon, callHtml))
+			sb.WriteString(fmt.Sprintf(`<div class="msg" data-filter="tools"><div class="tool-call" onclick="toggleToolOutput(this)">%s<span class="tool-cmd">%s</span><span class="tool-summary">%s</span><span class="tool-toggle">▶</span>`, toolIcon, callHtml, summaryHtml))
 
 			if fullResult != "" {
 				if showExpand {
-					sb.WriteString(fmt.Sprintf(`<span class="tool-toggle" onclick="toggleToolOutput(this)">▶</span><span class="tool-summary">%s</span></div><div class="tool-output" style="display:none">%s</div></div>`, summaryHtml, fullOutputHtml))
+					sb.WriteString(fmt.Sprintf(`</div><div class="tool-output" style="display:none">%s</div></div>`, fullOutputHtml))
 				} else {
-					sb.WriteString(fmt.Sprintf(`<span class="tool-result"> → %s</span><span class="%s">%s</span></div></div>`, summaryHtml, statusClass, statusIcon))
+					sb.WriteString(`</div></div>`)
 				}
 			} else {
-				sb.WriteString(fmt.Sprintf(`<span class="%s">%s</span></div></div>`, statusClass, statusIcon))
+				sb.WriteString(`</div></div>`)
 			}
 			continue
 		}
@@ -817,17 +796,23 @@ function escapeHtml(text) {
 }
 
 function toggleToolOutput(el) {
-    const toolCall = el.closest('.tool-call');
+    // el can be the tool-call div or the toggle icon
+    const toolCall = el.classList.contains('tool-call') ? el : el.closest('.tool-call');
     const output = toolCall.nextElementSibling;
+    const toggle = toolCall.querySelector('.tool-toggle');
     if (output && output.classList.contains('tool-output')) {
         if (output.style.display === 'none') {
             output.style.display = 'block';
-            el.classList.add('expanded');
-            el.textContent = '▼';
+            if (toggle) {
+                toggle.classList.add('expanded');
+                toggle.textContent = '▼';
+            }
         } else {
             output.style.display = 'none';
-            el.classList.remove('expanded');
-            el.textContent = '▶';
+            if (toggle) {
+                toggle.classList.remove('expanded');
+                toggle.textContent = '▶';
+            }
         }
     }
 }
