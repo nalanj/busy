@@ -182,7 +182,7 @@ html, body {
     .queue-item { padding: 10px; flex-wrap: wrap; }
     .queue-info { flex: 1 1 100%; }
     .config-view { padding: 12px; }
-    .config-row { padding: 10px 12px; flex-wrap: wrap; gap: 4px; }
+    .config-row { padding: 13px 16px; flex-wrap: wrap; gap: 4px; }
     .prompt-card { padding: 12px; }
     .session-actions { flex-wrap: wrap; }
     .session-btn { flex: 1; justify-content: center; }
