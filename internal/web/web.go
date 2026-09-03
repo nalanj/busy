@@ -473,6 +473,7 @@ send
 
 <div class="config-section">
 <span class="config-section-label">CONFIGURATION</span>
+<div style="background: #141B2E; border: 1px solid #273252; border-radius: 12px; overflow: hidden;">
 <div class="config-row">
 <span class="config-row-label">Model</span>
 <span class="config-row-value">` + html.EscapeString(s.modelName) + `</span>
@@ -486,8 +487,9 @@ send
 <span class="config-row-value">` + html.EscapeString(s.workspace) + `</span>
 </div>
 </div>
+</div>
 
-<div class="config-section" style="padding-top: 16px;">
+<div class="config-section">
 <span class="config-section-label">JOBS</span>
 ` + func() string {
 		if len(s.jobs) == 0 {
