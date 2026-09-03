@@ -112,7 +112,7 @@ func New(cfg *config.AgentConfig, tools []fantasy.AgentTool) (*Runner, error) {
 	}
 
 	// Create store
-	store, err := storage.NewStore(stateDir, cfg.Name)
+	store, err := storage.NewStore(stateDir)
 	if err != nil {
 		return nil, fmt.Errorf("creating store: %w", err)
 	}

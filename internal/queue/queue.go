@@ -74,15 +74,14 @@ type Queue struct {
 }
 
 // New creates a new queue in the given directory
-func New(dir, agentName string) (*Queue, error) {
-	queueDir := filepath.Join(dir, agentName)
-	if err := os.MkdirAll(queueDir, 0755); err != nil {
+func New(dir string) (*Queue, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("creating queue dir: %w", err)
 	}
 
 	return &Queue{
-		dir:       queueDir,
-		queuePath: filepath.Join(queueDir, "job_queue.jsonl"),
+		dir:       dir,
+		queuePath: filepath.Join(dir, "job_queue.jsonl"),
 	}, nil
 }
 

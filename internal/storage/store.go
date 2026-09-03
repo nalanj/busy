@@ -13,9 +13,8 @@ import (
 
 // Store handles persistence of agent state using JSONL files
 type Store struct {
-	dir       string
-	agentName string
-	mu        sync.Mutex
+	dir string
+	mu  sync.Mutex
 }
 
 // Message represents a stored conversation message
@@ -35,15 +34,14 @@ type Metadata struct {
 	SessionNum   int       `json:"session_num"`
 }
 
-// NewStore creates a store in the given directory for the given agent
-func NewStore(dir, agentName string) (*Store, error) {
-	if err := os.MkdirAll(filepath.Join(dir, agentName), 0755); err != nil {
+// NewStore creates a store in the given directory
+func NewStore(dir string) (*Store, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("creating store directory: %w", err)
 	}
 
 	return &Store{
-		dir:       dir,
-		agentName: agentName,
+		dir: dir,
 	}, nil
 }
 
@@ -54,18 +52,17 @@ func (s *Store) Close() error {
 
 // sessionPath returns the path for a given session number
 func (s *Store) sessionPath(num int) string {
-	return filepath.Join(s.dir, s.agentName, fmt.Sprintf("session_%03d.jsonl", num))
+	return filepath.Join(s.dir, fmt.Sprintf("session_%03d.jsonl", num))
 }
 
 // metadataPath returns the path to the metadata file
 func (s *Store) metadataPath() string {
-	return filepath.Join(s.dir, s.agentName, "meta.json")
+	return filepath.Join(s.dir, "meta.json")
 }
 
 // currentSession returns the current session number
 func (s *Store) currentSession() (int, error) {
-	agentDir := filepath.Join(s.dir, s.agentName)
-	entries, err := os.ReadDir(agentDir)
+	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil

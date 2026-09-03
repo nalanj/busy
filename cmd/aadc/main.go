@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -72,7 +74,7 @@ func main() {
 	defer runner.Close()
 
 	// Create job queue
-	jobQueue, err := queue.New(cfg.Agent.StateDir, cfg.Agent.Name)
+	jobQueue, err := queue.New(cfg.Agent.GetStateDir())
 	if err != nil {
 		log("error", "queue", fmt.Sprintf("failed to create job queue: %v", err))
 		os.Exit(1)
@@ -83,6 +85,24 @@ func main() {
 		server := web.New(cfg.Agent.ListenAddr, runner.Store(), jobQueue, cfg.Agent.Name)
 		runner.SetEmitter(server.SSEHub())
 		web.SetGlobalEmitter(server.SSEHub())
+		server.SetSystemPrompt(cfg.Agent.System)
+		server.SetModelName(cfg.Agent.Model)
+		server.SetDoneToken("<<<<<DONE>>>>>")
+
+		// Get workspace path
+		home, _ := os.UserHomeDir()
+		workspace := "/root/.local/share/aadc/workspace"
+		if home != "" {
+			workspace = filepath.Join(home, ".local", "share", "aadc", cfg.Agent.Name, "workspace")
+		}
+		server.SetWorkspace(workspace)
+
+		// Get container ID
+		containerID := "unknown"
+		if data, err := os.ReadFile("/etc/hostname"); err == nil {
+			containerID = strings.TrimSpace(string(data))
+		}
+		server.SetContainerID(containerID)
 
 		// Configure web-message jobs
 		var webMsgJobs []queue.WebMessageJob
