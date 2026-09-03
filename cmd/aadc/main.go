@@ -104,12 +104,12 @@ func main() {
 		}
 		server.SetContainerID(containerID)
 
-		// Pass job names to server
-		var jobNames []string
+		// Pass job info to server
+		var jobInfos []struct{ Name, Schedule, Prompt string }
 		for _, job := range cfg.Jobs {
-			jobNames = append(jobNames, job.Name+": "+job.Schedule)
+			jobInfos = append(jobInfos, struct{ Name, Schedule, Prompt string }{job.Name, job.Schedule, job.Prompt})
 		}
-		server.SetJobs(jobNames)
+		server.SetJobs(jobInfos)
 
 		// Configure web-message jobs
 		var webMsgJobs []queue.WebMessageJob

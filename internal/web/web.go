@@ -26,7 +26,11 @@ type Server struct {
 	doneToken     string
 	workspace     string
 	containerID   string
-	jobs          []string
+	jobs          []struct {
+		Name        string
+		Schedule   string
+		Prompt     string
+	}
 	sseHub        *SSEHub
 	webMsgJobs    []queue.WebMessageJob
 	webMsgEmitter func(job queue.Job)
@@ -62,7 +66,7 @@ func (s *Server) SetContainerID(id string) {
 	s.containerID = id
 }
 
-func (s *Server) SetJobs(jobs []string) {
+func (s *Server) SetJobs(jobs []struct{ Name, Schedule, Prompt string }) {
 	s.jobs = jobs
 }
 
@@ -494,7 +498,7 @@ send
 		}
 		var sb strings.Builder
 		for _, job := range s.jobs {
-			sb.WriteString(fmt.Sprintf(`<div class="config-row"><span class="config-row-value">%s</span></div>`, html.EscapeString(job)))
+			sb.WriteString(fmt.Sprintf(`<div class="config-row" style="flex-direction: column; gap: 4px;"><span class="config-row-label" style="color: #22D3EE;">%s</span><span class="config-row-value" style="color: #8B94AD; font-size: 10px;">%s</span><span class="config-row-value" style="font-size: 11px; white-space: pre-wrap;">%s</span></div>`, html.EscapeString(job.Name), html.EscapeString(job.Schedule), html.EscapeString(job.Prompt)))
 		}
 		return sb.String()
 	}() + `
