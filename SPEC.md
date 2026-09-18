@@ -164,13 +164,6 @@ internal/
   scheduler/          # Cron scheduling
 ```
 
-## Differences from ACOO
-
-- No daemon process - each agent is a standalone process
-- No web UI
-- No mail/messaging system
-- Config file defines everything for one agent
-
 ## Session Persistence
 
 Sessions are persisted to JSONL files for each agent:
