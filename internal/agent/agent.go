@@ -12,25 +12,23 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-
-	"github.com/nalanj/aadc/internal/provider"
+	"io"
 
 	"github.com/nalanj/aadc/internal/config"
 	"github.com/nalanj/aadc/internal/storage"
+	"github.com/nalanj/sorus"
 )
 
 const doneMarker = "<<<<<DONE>>>>>"
 const maxIterations = 100
 const maxCompactionRetries = 1
 
-// SSEEmitter interface for emitting events to web UI
+// SSEEmitter is the interface the agent uses to publish live events.
 type SSEEmitter interface {
-	Emit(eventType string, data interface{})
+	Emit(eventType string, data any)
 }
 
-// LogEntry represents a structured log entry
+// LogEntry is a structured log entry emitted to stdout.
 type LogEntry struct {
 	Time    string `json:"time"`
 	Level   string `json:"level"`
@@ -40,21 +38,18 @@ type LogEntry struct {
 	Job     string `json:"job,omitempty"`
 }
 
-// synchronized stdout writer
+// Synchronized stdout writer; currentJob gives us log context.
 var stdoutMu sync.Mutex
 var currentJob string
 
-// SetJob sets the current job name for logging context
-func SetJob(name string) {
-	currentJob = name
-}
+func SetJob(name string) { currentJob = name }
 
-func log(level, logType, message string) {
+func logf(level, logType, format string, args ...any) {
 	entry := LogEntry{
 		Time:    time.Now().Format(time.RFC3339),
 		Level:   level,
 		Type:    logType,
-		Message: message,
+		Message: fmt.Sprintf(format, args...),
 	}
 	if currentJob != "" {
 		entry.Job = currentJob
@@ -82,26 +77,43 @@ func logTool(tool, message string) {
 	fmt.Println(string(data))
 }
 
-// Runner manages the agent execution
+// Runner executes one agent against a single sorus client. Each Runner is
+// bound to one (provider, model) pair selected at construction.
 type Runner struct {
-	config          *config.AgentConfig
-	providerFactory *provider.Factory
-	tools          []fantasy.AgentTool
-	skills         []Skill
-	store          *storage.Store
-	sse            SSEEmitter
+	cfg          *config.AgentConfig
+	client       sorus.Client
+	model        *sorus.Model
+	systemPrompt string
+	tools        []ToolSpec
+	store        *storage.Store
+	sse          SSEEmitter
 }
 
-// New creates a new agent runner
-func New(cfg *config.AgentConfig, tools []fantasy.AgentTool) (*Runner, error) {
-	// Resolve skills directory path
-	skillsDir := cfg.SkillsDir
-	if skillsDir != "" && strings.HasPrefix(skillsDir, "~/") {
-		home, _ := os.UserHomeDir()
-		skillsDir = filepath.Join(home, skillsDir[2:])
+// New loads the sorus catalog, builds a client for the configured provider,
+// resolves the model, and constructs a Runner. The agent's workspace is
+// created under the state dir.
+func New(ctx context.Context, cfg *config.AgentConfig) (*Runner, error) {
+	cat, err := sorus.LoadCatalog(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("loading catalog: %w", err)
 	}
 
-	// Resolve state directory (default to ~/.local/share/aadc/{agent})
+	provider := cat.Provider(cfg.Provider)
+	if provider == nil {
+		return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
+	}
+
+	client, err := sorus.New(ctx, cat, cfg.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+
+	model, err := resolveModel(provider, cfg.Model)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve state dir (default ~/.local/share/aadc).
 	stateDir := cfg.StateDir
 	if stateDir == "" {
 		home, _ := os.UserHomeDir()
@@ -111,327 +123,394 @@ func New(cfg *config.AgentConfig, tools []fantasy.AgentTool) (*Runner, error) {
 		stateDir = filepath.Join(home, stateDir[2:])
 	}
 
-	// Create store
 	store, err := storage.NewStore(stateDir)
 	if err != nil {
 		return nil, fmt.Errorf("creating store: %w", err)
 	}
 
-	return &Runner{
-		config:          cfg,
-		providerFactory:  provider.NewFactory(),
-		tools:           tools,
-		skills:          Skills(skillsDir),
-		store:           store,
-	}, nil
-}
-
-// SetEmitter sets the SSE emitter for web UI events
-func (r *Runner) SetEmitter(emitter SSEEmitter) {
-	r.sse = emitter
-}
-
-// Close closes the runner's resources
-func (r *Runner) Close() error {
-	return r.store.Close()
-}
-
-// Store returns the storage store for the runner
-func (r *Runner) Store() *storage.Store {
-	return r.store
-}
-
-// Run executes the agent with the given prompt
-// trigger indicates what initiated this run: @session-start, @web-message, cron expression, etc.
-func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
-	// Get retain tokens from config, default to 20000
-	retainTokens := r.config.Compaction.GetRetainTokens()
-
-	// Ensure workspace exists
-	home, _ := os.UserHomeDir()
-	workspace := filepath.Join(home, ".local", "share", "aadc", r.config.Name, "workspace")
-	if err := os.MkdirAll(workspace, 0755); err != nil {
-		return fmt.Errorf("creating workspace: %w", err)
+	// Resolve skills dir.
+	skillsDir := cfg.SkillsDir
+	if skillsDir != "" && strings.HasPrefix(skillsDir, "~/") {
+		home, _ := os.UserHomeDir()
+		skillsDir = filepath.Join(home, skillsDir[2:])
 	}
 
-	// Build system prompt with skills
+	// Ensure workspace exists for the system prompt.
+	home, _ := os.UserHomeDir()
+	workspace := filepath.Join(home, ".local", "share", "aadc", cfg.Name, "workspace")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		return nil, fmt.Errorf("creating workspace: %w", err)
+	}
+
+	tools := StandardTools()
+
 	systemPrompt := BuildSystemPrompt(
-		r.config.System,
-		r.config.Name,
-		r.tools,
-		r.skills,
+		cfg.System,
+		cfg.Name,
+		ToolsForRequest(tools),
+		Skills(skillsDir),
 		workspace,
 	)
 
-	// Create provider
-	lm, err := r.createProvider()
-	if err != nil {
-		return fmt.Errorf("creating provider: %w", err)
-	}
+	return &Runner{
+		cfg:          cfg,
+		client:       client,
+		model:        model,
+		systemPrompt: systemPrompt,
+		tools:        tools,
+		store:        store,
+	}, nil
+}
 
-	// Build agent options
-	agentOptions := []fantasy.AgentOption{
-		fantasy.WithSystemPrompt(systemPrompt),
-		fantasy.WithTools(r.tools...),
+// resolveModel finds a model on the provider by case-insensitive ID or name.
+// Falls back to the first model if the config didn't specify one.
+func resolveModel(p *sorus.Provider, configured string) (*sorus.Model, error) {
+	if configured == "" {
+		models := p.Models()
+		if len(models) == 0 {
+			return nil, fmt.Errorf("provider %s has no models", p.ID)
+		}
+		return models[0], nil
 	}
+	for _, m := range p.Models() {
+		if strings.EqualFold(m.ID, configured) || strings.EqualFold(m.Name, configured) {
+			return m, nil
+		}
+	}
+	return nil, fmt.Errorf("provider %s has no model %q", p.ID, configured)
+}
 
-	thinkingBudget := r.config.GetThinkingBudget()
-	if thinkingBudget > 0 {
-		opts := anthropic.NewProviderOptions(&anthropic.ProviderOptions{
-			Thinking: &anthropic.ThinkingProviderOption{
-				BudgetTokens: thinkingBudget,
-			},
+func (r *Runner) SetEmitter(emitter SSEEmitter) { r.sse = emitter }
+func (r *Runner) Close() error                  { return r.store.Close() }
+func (r *Runner) Store() *storage.Store         { return r.store }
+
+// Run executes the agent with the given prompt.
+// trigger records what initiated this run (cron expression, @session-start, etc.).
+func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
+	retainTokens := r.cfg.Compaction.GetRetainTokens()
+
+	SetJob(r.cfg.Name)
+	logf("info", "agent", "started")
+
+	// Save user prompt.
+	msgContent := prompt
+	if trigger != "" {
+		msgContent = fmt.Sprintf("[%s]\n%s", trigger, prompt)
+	}
+	if err := saveUserPrompt(r.store, msgContent); err != nil {
+		logf("warn", "session", "failed to save user prompt: %v", err)
+	}
+	if r.sse != nil {
+		r.sse.Emit("user", map[string]string{
+			"trigger": trigger,
+			"content": prompt,
 		})
-		agentOptions = append(agentOptions, fantasy.WithProviderOptions(opts))
 	}
 
-	agentInstance := fantasy.NewAgent(lm, agentOptions...)
-
-	log("info", "agent", "started")
-	SetJob(r.config.Name)
-
-	// Load previous messages from session
-	messages, err := r.store.GetMessages()
+	// Load prior conversation.
+	history, err := loadMessages(r.store)
 	if err != nil {
-		log("warn", "session", fmt.Sprintf("failed to load previous messages: %v", err))
-		messages = []storage.Message{}
-	} else if len(messages) > 0 {
-		log("info", "session", fmt.Sprintf("loaded %d previous messages", len(messages)))
+		logf("warn", "session", "failed to load previous messages: %v", err)
+		history = nil
+	} else if len(history) > 0 {
+		logf("info", "session", "loaded %d previous messages", len(history))
 	}
 
-	// Convert stored messages to fantasy format
-	fantasyMessages := convertMessages(messages)
-
-	// Wrap initial prompt with completion instructions
-	initialPrompt := prompt + "\n\nWhen finished, respond with '<<<<<DONE>>>>>'."
-	currentPrompt := initialPrompt
-	iteration := 0
+	messages := append([]sorus.Message(nil), history...)
 	compactionRetries := 0
 
-	for iteration < maxIterations {
-		iteration++
+	currentPrompt := prompt + "\n\nWhen finished, respond with '<<<<<DONE>>>>>'."
+	initialPrompt := currentPrompt
 
-		// Save user prompt to store
-		var msgContent string
-		if trigger != "" {
-			msgContent = fmt.Sprintf("[%s]\n%s", trigger, currentPrompt)
-		} else {
-			msgContent = currentPrompt
+	for iteration := 0; iteration < maxIterations; iteration++ {
+		// Build the next request from scratch each iteration.
+		// Sorus's req.Clone() supports this efficiently.
+		req := sorus.NewRequest(r.model)
+		req.System(r.systemPrompt)
+		req.Tools(ToolsForRequest(r.tools)...)
+		if budget := int(r.cfg.GetThinkingBudget()); budget > 0 {
+			req.Reasoning(sorus.Reasoning{BudgetTokens: budget})
 		}
-		r.store.AddMessage(storage.Message{
-			Role:      "user",
-			Content:   msgContent,
-			Timestamp: time.Now(),
-		})
-		if r.sse != nil {
-			r.sse.Emit("user", map[string]string{
-				"trigger": trigger,
-				"content": currentPrompt,
-			})
+		for _, m := range messages {
+			req.Message(m)
 		}
+		req.User(currentPrompt)
 
-		var textBuilder strings.Builder
-		var inThinking bool
-
-		result, err := agentInstance.Stream(ctx, fantasy.AgentStreamCall{
-			Prompt:   currentPrompt,
-			Messages: fantasyMessages,
-			OnTextDelta: func(id, text string) error {
-				textBuilder.WriteString(text)
-				return nil
-			},
-			OnReasoningDelta: func(id, text string) error {
-				inThinking = true
-				return nil
-			},
-			OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-				if inThinking {
-					log("debug", "thinking", fmt.Sprintf("completed (%d chars)", len(reasoning.Text)))
-					inThinking = false
-				}
-				return nil
-			},
-			OnToolCall: func(call fantasy.ToolCallContent) error {
-				inputSummary := call.Input
-				if len(inputSummary) > 100 {
-					inputSummary = inputSummary[:100] + "..."
-				}
-				logTool(call.ToolName, inputSummary)
-				// Store as a single "tool" message; result will be appended to it
-				r.store.AddMessage(storage.Message{
-					Role:      "tool",
-					ToolName:  call.ToolName,
-					Content:   "$ " + call.ToolName + " " + inputSummary,
-					Timestamp: time.Now(),
-				})
-				if r.sse != nil {
-					r.sse.Emit("tool", map[string]string{
-						"tool":    call.ToolName,
-						"content": inputSummary,
-					})
-				}
-				return nil
-			},
-			OnToolResult: func(result fantasy.ToolResultContent) error {
-				resultStr := fmt.Sprintf("%v", result.Result)
-				log("debug", "tool_result", resultStr)
-				// Find the LAST tool message with matching name and append result
-				// Store the full result for later expansion
-				msgs, err := r.store.GetMessages()
-				if err == nil {
-					var lastToolIdx = -1
-					for j := len(msgs) - 1; j >= 0; j-- {
-						if msgs[j].Role == "tool" && msgs[j].ToolName == result.ToolName {
-							lastToolIdx = j
-							break
-						}
-					}
-					if lastToolIdx >= 0 {
-						msgs[lastToolIdx].Content = msgs[lastToolIdx].Content + "\n" + resultStr
-						r.store.UpdateMessage(msgs[lastToolIdx])
-					}
-				}
-				// Truncate for SSE only
-				if len(resultStr) > 200 {
-					resultStr = resultStr[:200] + "..."
-				}
-				if r.sse != nil {
-					r.sse.Emit("tool_result", map[string]string{
-						"tool":    result.ToolName,
-						"content": resultStr,
-					})
-				}
-				return nil
-			},
-			OnStepFinish: func(step fantasy.StepResult) error {
-				text := textBuilder.String()
-				if text != "" {
-					r.store.AddMessage(storage.Message{
-						Role:      "assistant",
-						Content:   text,
-						Timestamp: time.Now(),
-					})
-					if r.sse != nil {
-						r.sse.Emit("agent", map[string]string{"content": text})
-					}
-				}
-				return nil
-			},
-		})
-
+		response, err := r.runStep(ctx, req)
 		if err != nil {
-			var provErr *fantasy.ProviderError
-			if errors.As(err, &provErr) && provErr.IsContextTooLarge() {
-				if compactionRetries < maxCompactionRetries {
-					log("info", "compaction", "context too large, compacting")
-					meta, _ := r.store.GetMetadata()
-					msgCount := 0
-					if meta != nil {
-						msgCount = meta.MessageCount
-					}
-					summary := generateSummary(ctx, lm, systemPrompt, msgCount)
-					if err := r.store.CompactStart(summary, retainTokens); err != nil {
-						log("error", "compaction", fmt.Sprintf("failed: %v", err))
-					}
-					if r.sse != nil {
-						r.sse.Emit("compaction", map[string]string{"content": "Context compacted, continuing..."})
-					}
-					compactionRetries++
-					fantasyMessages = nil
-					continue
+			if isContextTooLarge(err) && compactionRetries < maxCompactionRetries {
+				logf("info", "compaction", "context too large, compacting")
+				summary := r.generateSummary(ctx, messages)
+				if cerr := r.store.CompactStart(summary, retainTokens); cerr != nil {
+					logf("error", "compaction", "failed: %v", cerr)
 				}
-				log("error", "agent", "context overflow")
 				if r.sse != nil {
-					r.sse.Emit("error", map[string]string{"message": "Context overflow"})
+					r.sse.Emit("compaction", map[string]string{"content": "Context compacted, continuing..."})
 				}
-				return fmt.Errorf("context overflow: %w", err)
+				compactionRetries++
+				messages = nil
+				continue
 			}
-			log("error", "agent", err.Error())
+			logf("error", "agent", "%v", err)
 			if r.sse != nil {
 				r.sse.Emit("error", map[string]string{"message": err.Error()})
 			}
 			return fmt.Errorf("agent error: %w", err)
 		}
 
-		// Check for done
-		response := textBuilder.String()
-		if result != nil && result.Response.Content.Text() != "" {
-			response = result.Response.Content.Text()
+		text := response.Message.Text()
+
+		// Persist assistant text response.
+		if err := saveAssistantText(r.store, text); err != nil {
+			logf("warn", "session", "failed to save assistant text: %v", err)
+		}
+		if text != "" && r.sse != nil {
+			r.sse.Emit("agent", map[string]string{"content": text})
 		}
 
-		if isDone(response) {
+		// Done marker check.
+		if isDone(text) {
 			meta, _ := r.store.GetMetadata()
 			msgCount := 0
 			if meta != nil {
 				msgCount = meta.MessageCount
 			}
-			log("info", "done", fmt.Sprintf("completed with %d total messages", msgCount))
+			logf("info", "done", "completed with %d total messages", msgCount)
 			if r.sse != nil {
-				r.sse.Emit("done", map[string]interface{}{"message": fmt.Sprintf("completed with %d total messages", msgCount)})
+				r.sse.Emit("done", map[string]any{"message": fmt.Sprintf("completed with %d total messages", msgCount)})
 			}
 			return nil
 		}
 
-		// Build messages for next iteration
-		fantasyMessages = append(fantasyMessages, fantasy.Message{
-			Role: fantasy.MessageRoleUser,
-			Content: []fantasy.MessagePart{
-				&fantasy.TextPart{Text: currentPrompt},
-			},
-		})
-		fantasyMessages = append(fantasyMessages, fantasy.Message{
-			Role: fantasy.MessageRoleAssistant,
-			Content: []fantasy.MessagePart{
-				&fantasy.TextPart{Text: response},
-			},
+		// No tool calls → no more work possible.
+		if len(response.Message.ToolCalls) == 0 {
+			// Model stopped without a done marker and no tool calls.
+			logf("warn", "agent", "model stopped without DONE marker (stop_reason=%s)", response.StopReason)
+			if r.sse != nil {
+				r.sse.Emit("done", map[string]any{"message": "model stopped without completion marker"})
+			}
+			return nil
+		}
+
+		// Append the assistant turn with tool calls to history.
+		assistantContent := response.Message.Content
+		if len(assistantContent) == 0 && text != "" {
+			assistantContent = []sorus.Part{sorus.Text{Value: text}}
+		}
+		messages = append(messages, sorus.Message{
+			Role:      sorus.RoleAssistant,
+			Content:   assistantContent,
+			ToolCalls: response.Message.ToolCalls,
 		})
 
+		// Execute tools and accumulate results.
+		var toolParts []sorus.Part
+		for _, tc := range response.Message.ToolCalls {
+			argsJSON := tc.Arguments
+			if argsJSON == "" {
+				argsJSON = "{}"
+			}
+			logTool(tc.Name, summarizeArgs(argsJSON))
+
+			if err := saveToolCall(r.store, tc.Name, argsJSON); err != nil {
+				logf("warn", "session", "failed to save tool call: %v", err)
+			}
+			if r.sse != nil {
+				r.sse.Emit("tool", map[string]string{
+					"tool":    tc.Name,
+					"content": summarizeArgs(argsJSON),
+				})
+			}
+
+			resultText, execErr := dispatchTool(ctx, r.tools, tc.Name, argsJSON)
+			if execErr != nil {
+				resultText = "error: " + execErr.Error()
+			}
+			logf("debug", "tool_result", "%s", resultText)
+
+			if err := appendToolResult(r.store, tc.Name, resultText); err != nil {
+				logf("warn", "session", "failed to append tool result: %v", err)
+			}
+
+			// For SSE, truncate long results.
+			sseResult := resultText
+			if len(sseResult) > 200 {
+				sseResult = sseResult[:200] + "..."
+			}
+			if r.sse != nil {
+				r.sse.Emit("tool_result", map[string]string{
+					"tool":    tc.Name,
+					"content": sseResult,
+				})
+			}
+
+			toolParts = append(toolParts, sorus.ToolResult{
+				ToolCallID: tc.ID,
+				Content:    []sorus.Part{sorus.Text{Value: resultText}},
+			})
+		}
+
+		// Append the tool-turn message to history so the next request sees it.
+		messages = append(messages, sorus.Message{
+			Role:    sorus.RoleTool,
+			Content: toolParts,
+		})
+
+		// Next iteration prompts the model to continue (with the new tool
+		// results already in `messages`).
 		currentPrompt = "Continue. When finished, respond with '<<<<<DONE>>>>>'."
+		_ = initialPrompt // retained for the very first prompt; unused after iter 0
 	}
 
-	log("error", "agent", fmt.Sprintf("max iterations reached (%d)", maxIterations))
-	return fmt.Errorf("max iterations reached")
+	logf("error", "agent", "max iterations reached (%d)", maxIterations)
+	return fmt.Errorf("max iterations reached (%d)", maxIterations)
 }
 
-// convertMessages converts storage messages to fantasy messages
-func convertMessages(stored []storage.Message) []fantasy.Message {
-	var result []fantasy.Message
-	for _, msg := range stored {
-		role := fantasy.MessageRole(msg.Role)
-		// Skip system messages (summary only, actual system prompt handled separately)
-		if role == fantasy.MessageRoleSystem {
-			continue
-		}
-		result = append(result, fantasy.Message{
-			Role: role,
-			Content: []fantasy.MessagePart{
-				&fantasy.TextPart{Text: msg.Content},
-			},
-		})
+// runStep performs one streaming call against sorus and returns the final
+// Response. Errors from the stream are wrapped and returned; isContextTooLarge
+// callers can sniff the underlying SDK error.
+func (r *Runner) runStep(ctx context.Context, req *sorus.Request) (*sorus.Response, error) {
+	stream, err := r.client.Stream(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("opening stream: %w", err)
 	}
-	return result
+	defer stream.Close()
+
+	var (
+		content       strings.Builder
+		reasoning     strings.Builder
+		toolCalls     []sorus.ToolCall
+		usage         *sorus.Usage
+		stopReason    string
+		finalMessage  *sorus.Message
+		inThinking    bool
+		thinkingChars int
+	)
+
+	for stream.Next() {
+		ev := stream.Event()
+		switch ev.Type {
+		case sorus.EventContentStart, sorus.EventReasoningStart:
+			// signal — nothing to do.
+		case sorus.EventContentDelta:
+			content.WriteString(ev.TextDelta)
+		case sorus.EventReasoningDelta:
+			reasoning.WriteString(ev.ReasoningDelta)
+			inThinking = true
+		case sorus.EventReasoningEnd:
+			if inThinking {
+				logf("debug", "thinking", "completed (%d chars)", thinkingChars)
+				inThinking = false
+				thinkingChars = 0
+			}
+		case sorus.EventToolCallStart:
+			if ev.ToolCall != nil {
+				tc := *ev.ToolCall
+				tc.Arguments = ""
+				toolCalls = append(toolCalls, tc)
+			}
+		case sorus.EventToolCallDelta:
+			if len(toolCalls) > 0 {
+				toolCalls[len(toolCalls)-1].Arguments += ev.ArgumentDelta
+			}
+		case sorus.EventToolCallEnd:
+			// assembled tool call is already in toolCalls
+		case sorus.EventDone:
+			usage = ev.Usage
+			stopReason = ev.StopReason
+			if ev.Message != nil {
+				finalMessage = ev.Message
+			}
+		case sorus.EventError:
+			if ev.Err != nil {
+				return nil, ev.Err
+			}
+		}
+	}
+
+	if err := stream.Err(); err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+
+	if finalMessage == nil {
+		// Synthesize from collected fragments (matches sorus's Collect behavior).
+		m := sorus.Message{Role: sorus.RoleAssistant}
+		if content.Len() > 0 {
+			m.Content = append(m.Content, sorus.Text{Value: content.String()})
+		}
+		if reasoning.Len() > 0 {
+			m.Content = append(m.Content, sorus.Text{Value: reasoning.String()})
+		}
+		if len(toolCalls) > 0 {
+			m.ToolCalls = toolCalls
+		}
+		finalMessage = &m
+	}
+
+	resp := &sorus.Response{
+		Message:    *finalMessage,
+		StopReason: stopReason,
+	}
+	if usage != nil {
+		resp.Usage = *usage
+	}
+	return resp, nil
+}
+
+// generateSummary asks the model for a 1-2 sentence summary of the conversation,
+// used by the compaction path. Falls back to a generic message on failure.
+func (r *Runner) generateSummary(ctx context.Context, messages []sorus.Message) string {
+	if len(messages) == 0 {
+		return "Conversation summary unavailable"
+	}
+
+	// Build a one-shot summary request — we don't persist it; it only feeds
+	// the compaction summary line.
+	req := sorus.NewRequest(r.model)
+	req.System("You produce concise conversation summaries. Respond with 1-2 sentences.")
+	req.User(fmt.Sprintf(
+		"Summarize this conversation in 1-2 sentences. There are %d prior messages.",
+		len(messages),
+	))
+
+	response, err := r.client.Chat(ctx, req)
+	if err != nil {
+		return "Conversation summary unavailable"
+	}
+
+	summary := strings.TrimSpace(response.Message.Text())
+	if len(summary) > 200 {
+		summary = summary[:200] + "..."
+	}
+	return summary
+}
+
+// summarizeArgs returns a short, single-line summary of a tool call's
+// arguments for logging. Falls back to {} on empty input.
+func summarizeArgs(s string) string {
+	if s == "" {
+		return "{}"
+	}
+	if len(s) > 100 {
+		return s[:100] + "..."
+	}
+	return s
 }
 
 func isDone(response string) bool {
+	if response == "" {
+		return false
+	}
 	for _, line := range strings.Split(response, "\n") {
 		line = strings.TrimSpace(line)
 		if line == doneMarker {
 			return true
 		}
 	}
-	response = strings.TrimSpace(response)
-	if strings.HasSuffix(response, doneMarker) {
-		return true
-	}
-	return false
+	return strings.HasSuffix(strings.TrimSpace(response), doneMarker)
 }
 
-// createProvider creates a language model provider
-func (r *Runner) createProvider() (fantasy.LanguageModel, error) {
-	return r.providerFactory.CreateProvider(r.config.Provider, r.config.Model)
-}
-
-// CheckPreconditions runs shell commands and returns true if all succeed
+// CheckPreconditions runs shell commands and returns true if all succeed.
 func CheckPreconditions(commands []string) error {
 	for _, cmd := range commands {
 		cmd = strings.TrimSpace(cmd)
@@ -444,24 +523,4 @@ func CheckPreconditions(commands []string) error {
 		}
 	}
 	return nil
-}
-
-// generateSummary creates a summary of the conversation for compaction
-func generateSummary(ctx context.Context, lm fantasy.LanguageModel, systemPrompt string, messageCount int) string {
-	summaryPrompt := fmt.Sprintf(`Summarize this conversation in 1-2 sentences. The conversation had %d messages. System prompt: %s`, messageCount, systemPrompt)
-
-	response, err := lm.Generate(ctx, fantasy.Call{
-		Prompt: []fantasy.Message{
-			{Role: fantasy.MessageRoleUser, Content: []fantasy.MessagePart{&fantasy.TextPart{Text: summaryPrompt}}},
-		},
-	})
-	if err != nil {
-		return "Conversation summary unavailable"
-	}
-
-	summary := strings.TrimSpace(response.Content.Text())
-	if len(summary) > 200 {
-		summary = summary[:200] + "..."
-	}
-	return summary
 }

@@ -6,7 +6,7 @@ import (
 
 func TestEnqueueDequeue(t *testing.T) {
 	tmpDir := t.TempDir()
-	q, err := New(tmpDir, "test-agent")
+	q, err := New(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestEnqueueDequeue(t *testing.T) {
 
 func TestFIFO(t *testing.T) {
 	tmpDir := t.TempDir()
-	q, err := New(tmpDir, "test-agent")
+	q, err := New(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestFIFO(t *testing.T) {
 
 func TestPeek(t *testing.T) {
 	tmpDir := t.TempDir()
-	q, err := New(tmpDir, "test-agent")
+	q, err := New(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}

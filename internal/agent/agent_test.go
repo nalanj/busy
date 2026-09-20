@@ -1,11 +1,12 @@
 package agent
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
 
-	"charm.land/fantasy"
+	"github.com/nalanj/sorus"
 )
 
 func TestCheckPreconditions(t *testing.T) {
@@ -57,7 +58,7 @@ func TestCheckPreconditions(t *testing.T) {
 			if tt.wantError && err == nil {
 				t.Error("Expected error but got none")
 			}
-			if !tt.wantError && err != nil {
+			if !tt.wantError && tt.wantError != (err != nil) {
 				t.Errorf("Unexpected error: %v", err)
 			}
 		})
@@ -70,36 +71,12 @@ func TestIsDone(t *testing.T) {
 		response string
 		want     bool
 	}{
-		{
-			name:     "marker on own line",
-			response: "Hello world\n<<<<<DONE>>>>>\nGoodbye",
-			want:     true,
-		},
-		{
-			name:     "marker at end",
-			response: "Hello world\n<<<<<DONE>>>>>",
-			want:     true,
-		},
-		{
-			name:     "marker only",
-			response: "<<<<<DONE>>>>>",
-			want:     true,
-		},
-		{
-			name:     "no marker",
-			response: "Hello world\nGoodbye",
-			want:     false,
-		},
-		{
-			name:     "marker with spaces",
-			response: "Hello\n   <<<<<DONE>>>>>\n",
-			want:     true,
-		},
-		{
-			name:     "partial marker",
-			response: "Hello <<<<<DONE>>>>",
-			want:     false,
-		},
+		{"marker on own line", "Hello world\n<<<<<DONE>>>>>\nGoodbye", true},
+		{"marker at end", "Hello world\n<<<<<DONE>>>>>", true},
+		{"marker only", "<<<<<DONE>>>>>", true},
+		{"no marker", "Hello world\nGoodbye", false},
+		{"marker with spaces", "Hello\n   <<<<<DONE>>>>>\n", true},
+		{"partial marker", "Hello <<<<<DONE>>>>", false},
 	}
 
 	for _, tt := range tests {
@@ -115,7 +92,7 @@ func TestIsDone(t *testing.T) {
 func TestStandardTools(t *testing.T) {
 	tools := StandardTools()
 
-	expectedTools := []string{
+	expected := []string{
 		"read_file",
 		"edit_file",
 		"bash",
@@ -123,14 +100,77 @@ func TestStandardTools(t *testing.T) {
 		"list_dir",
 	}
 
-	if len(tools) != len(expectedTools) {
-		t.Errorf("Expected %d tools, got %d", len(expectedTools), len(tools))
+	if len(tools) != len(expected) {
+		t.Fatalf("Expected %d tools, got %d", len(expected), len(tools))
+	}
+	for i, name := range expected {
+		if tools[i].Definition.Name != name {
+			t.Errorf("Tool %d: expected %s, got %s", i, name, tools[i].Definition.Name)
+		}
+	}
+}
+
+func TestToolDispatchReadFile(t *testing.T) {
+	tmp := t.TempDir()
+	path := tmp + "/hello.txt"
+	if err := os.WriteFile(path, []byte("hello world"), 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	for i, expected := range expectedTools {
-		if tools[i].Info().Name != expected {
-			t.Errorf("Tool %d: expected %s, got %s", i, expected, tools[i].Info().Name)
-		}
+	specs := StandardTools()
+	args := `{"path":"` + path + `"}`
+	got, err := dispatchTool(t.Context(), specs, "read_file", args)
+	if err != nil {
+		t.Fatalf("dispatchTool: %v", err)
+	}
+	if got != "hello world" {
+		t.Errorf("got %q, want %q", got, "hello world")
+	}
+}
+
+func TestToolDispatchUnknown(t *testing.T) {
+	specs := StandardTools()
+	_, err := dispatchTool(t.Context(), specs, "no_such_tool", `{}`)
+	if err == nil || !strings.Contains(err.Error(), "unknown tool") {
+		t.Errorf("expected unknown-tool error, got %v", err)
+	}
+}
+
+func TestToolDispatchBash(t *testing.T) {
+	specs := StandardTools()
+	got, err := dispatchTool(t.Context(), specs, "bash", `{"command":"echo hi"}`)
+	if err != nil {
+		t.Fatalf("dispatchTool: %v", err)
+	}
+	if strings.TrimSpace(got) != "hi" {
+		t.Errorf("got %q, want %q", got, "hi")
+	}
+}
+
+func TestToolDispatchRejectsUnknownFields(t *testing.T) {
+	specs := StandardTools()
+	// extra field "extra" is unknown to read_fileInput.
+	_, err := dispatchTool(t.Context(), specs, "read_file", `{"path":"x","extra":"y"}`)
+	if err == nil {
+		t.Fatal("expected strict-unmarshal error for unknown field")
+	}
+}
+
+func TestIsContextTooLarge(t *testing.T) {
+	plainErr := errors.New("prompt is too long")
+	if !isContextTooLarge(plainErr) {
+		t.Error("expected detection of generic 'prompt is too long'")
+	}
+	otherErr := errors.New("network timeout")
+	if isContextTooLarge(otherErr) {
+		t.Error("should not flag generic network error")
+	}
+	openAIErr := errors.New("openai: context_length_exceeded: 4096 > 4096")
+	if !isContextTooLarge(openAIErr) {
+		t.Error("expected detection of OpenAI context_length_exceeded")
+	}
+	if isContextTooLarge(nil) {
+		t.Error("nil should not flag")
 	}
 }
 
@@ -142,7 +182,6 @@ func TestSkillsEmptyDir(t *testing.T) {
 }
 
 func TestSkillsLoadFromDir(t *testing.T) {
-	// Create a temp skill directory
 	tmpDir := t.TempDir()
 	skillDir := tmpDir + "/test-skill"
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
@@ -166,7 +205,6 @@ This skill does something.`
 	if len(skills) != 1 {
 		t.Fatalf("Expected 1 skill, got %d", len(skills))
 	}
-
 	if skills[0].Name != "test-skill" {
 		t.Errorf("Expected name 'test-skill', got '%s'", skills[0].Name)
 	}
@@ -182,9 +220,7 @@ func TestBuildSkillsSection(t *testing.T) {
 	skills := []Skill{
 		{Name: "test-skill", Description: "A test skill", Location: "/path/to/skills/test-skill/SKILL.md"},
 	}
-
 	section := BuildSkillsSection(skills)
-
 	if !strings.Contains(section, "<available_skills>") {
 		t.Error("Expected available_skills tag")
 	}
@@ -197,18 +233,16 @@ func TestBuildSkillsSection(t *testing.T) {
 }
 
 func TestBuildSkillsSectionEmpty(t *testing.T) {
-	section := BuildSkillsSection([]Skill{})
-	if section != "" {
+	if section := BuildSkillsSection([]Skill{}); section != "" {
 		t.Errorf("Expected empty string for no skills, got: %s", section)
 	}
 }
 
 func TestBuildSystemPrompt(t *testing.T) {
-	tools := StandardTools()
+	tools := ToolsForRequest(StandardTools())
 	skills := []Skill{
 		{Name: "test-skill", Description: "A test skill", Location: "/path/skills/test/SKILL.md"},
 	}
-
 	prompt := BuildSystemPrompt("You are a test agent.", "test-agent", tools, skills, "/workspace")
 
 	if !strings.Contains(prompt, "You are test-agent.") {
@@ -229,15 +263,27 @@ func TestBuildSystemPrompt(t *testing.T) {
 }
 
 func TestBuildSystemPromptMinimal(t *testing.T) {
-	// Empty agent name results in empty prompt
-	prompt := BuildSystemPrompt("", "", []fantasy.AgentTool{}, []Skill{}, "")
-	if prompt != "" {
+	if prompt := BuildSystemPrompt("", "", []sorus.Tool{}, []Skill{}, ""); prompt != "" {
 		t.Errorf("Expected empty prompt for empty agent name, got: %s", prompt)
 	}
-
-	// Non-empty body still produces prompt
-	prompt = BuildSystemPrompt("You are helpful.", "", []fantasy.AgentTool{}, []Skill{}, "")
-	if !strings.Contains(prompt, "You are helpful.") {
+	if prompt := BuildSystemPrompt("You are helpful.", "", []sorus.Tool{}, []Skill{}, ""); !strings.Contains(prompt, "You are helpful.") {
 		t.Error("Expected body in prompt")
+	}
+}
+
+func TestSummarizeArgs(t *testing.T) {
+	if got := summarizeArgs(""); got != "{}" {
+		t.Errorf("empty: got %q, want %q", got, "{}")
+	}
+	if got := summarizeArgs(`{"a":1}`); got != `{"a":1}` {
+		t.Errorf("short: got %q", got)
+	}
+	long := strings.Repeat("x", 150)
+	got := summarizeArgs(long)
+	if !strings.HasSuffix(got, "...") {
+		t.Errorf("expected truncation, got %q", got)
+	}
+	if len(got) > 104 {
+		t.Errorf("expected <= 104 chars, got %d", len(got))
 	}
 }

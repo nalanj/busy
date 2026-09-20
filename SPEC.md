@@ -15,7 +15,7 @@ aadc --config /path/to/agent.yaml
 ```yaml
 agent:
   name: "my-agent"
-  # 42 providers embedded (anthropic, openai, azure, bedrock, deepseek, gemini, groq, fireworks, openrouter, etc.)
+  # Providers loaded from the [models.dev] catalog (anthropic, openai, azure, bedrock, deepseek, gemini, groq, fireworks, openrouter, etc.) at startup
   provider: "anthropic"
   model: "claude-sonnet-4-20250514"
   system: "You are a helpful assistant."
@@ -160,7 +160,7 @@ Environment variables like `ANTHROPIC_API_KEY` are passed through.
 cmd/aadc/main.go      # Entry point
 internal/
   config/             # YAML config loading
-  agent/              # Agent runner and fantasy loop
+  agent/              # Agent runner and manual loop on top of github.com/nalanj/sorus
   scheduler/          # Cron scheduling
 ```
 

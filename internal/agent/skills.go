@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charm.land/fantasy"
+	"github.com/nalanj/sorus"
 )
 
 // Skill represents a loaded skill
@@ -172,7 +172,7 @@ func BuildSkillsSection(skills []Skill) string {
 }
 
 // BuildSystemPrompt composes the full system prompt from agent body, tools, and skills
-func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.AgentTool, skills []Skill, workspacePath string) string {
+func BuildSystemPrompt(agentBody string, agentName string, tools []sorus.Tool, skills []Skill, workspacePath string) string {
 	var parts []string
 
 	// Agent identity - at the top, prominent
@@ -194,8 +194,7 @@ func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.Agent
 	if len(tools) > 0 {
 		parts = append(parts, "", "You have access to these tools:")
 		for _, tool := range tools {
-			info := tool.Info()
-			parts = append(parts, "- "+info.Name+": "+info.Description)
+			parts = append(parts, "- "+tool.Name+": "+tool.Description)
 		}
 	}
 

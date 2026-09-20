@@ -3,28 +3,26 @@ package storage
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestNewStore(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "test-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
 
-	// Verify directory was created
-	agentDir := filepath.Join(tmpDir, "test-agent")
-	if _, err := os.Stat(agentDir); os.IsNotExist(err) {
-		t.Error("Agent directory was not created")
+	// Verify root directory was created
+	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
+		t.Error("Store directory was not created")
 	}
 }
 
 func TestAddMessage(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "test-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -59,7 +57,7 @@ func TestAddMessage(t *testing.T) {
 
 func TestMultipleMessages(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "test-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -87,7 +85,7 @@ func TestMultipleMessages(t *testing.T) {
 
 func TestCompactStart(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "test-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -138,7 +136,7 @@ func TestCompactStart(t *testing.T) {
 
 func TestCompactPreservesChain(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "test-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -175,7 +173,7 @@ func TestCompactPreservesChain(t *testing.T) {
 
 func TestCompactKeepsCompletePairs(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "test-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -226,7 +224,7 @@ func TestCompactKeepsCompletePairs(t *testing.T) {
 
 func TestMetadata(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "test-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -253,7 +251,7 @@ func TestMetadata(t *testing.T) {
 
 func TestEmptyStore(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir, "empty-agent")
+	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}

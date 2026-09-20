@@ -66,7 +66,7 @@ func main() {
 
 	log("info", "config", fmt.Sprintf("loaded config from %s", *configPath))
 
-	runner, err := agent.New(&cfg.Agent, agent.StandardTools())
+	runner, err := agent.New(context.Background(), &cfg.Agent)
 	if err != nil {
 		log("error", "agent", fmt.Sprintf("failed to create runner: %v", err))
 		os.Exit(1)
