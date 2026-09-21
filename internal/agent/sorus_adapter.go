@@ -9,9 +9,12 @@ import (
 
 // loadMessages reads persisted messages from the store and converts them
 // into the sorus form. The on-disk format pre-dates sorus; tool calls are
-// stored as "tool" rows with Content = "$ <name> <args>\n<result>". We
-// preserve that loss as a single text-blob per past tool message — the
-// model treats it as historical conversation context.
+// stored as "tool" rows with Content = "$ <name> <args>\n<result>".
+// Sorus's RoleTool Anthropic builder silently drops non-ToolResult parts,
+// which would produce empty messages. We work around that by merging each
+// historical tool row's content into the *following* assistant message as
+// a Text part, so the model still sees the tool invocation + result in
+// its conversation history.
 //
 // System roles are skipped (the system prompt is supplied separately on
 // each Request).
@@ -21,17 +24,41 @@ func loadMessages(store *storage.Store) ([]sorus.Message, error) {
 		return nil, err
 	}
 	out := make([]sorus.Message, 0, len(stored))
+	var pendingTool string
+	flush := func() {
+		if pendingTool == "" {
+			return
+		}
+		// Find last assistant turn (or user turn if no assistant has been seen yet)
+		// and prepend the tool context as a Text part.
+		for i := len(out) - 1; i >= 0; i-- {
+			if out[i].Role == sorus.RoleAssistant || out[i].Role == sorus.RoleUser {
+				prefix := sorus.Text{Value: pendingTool}
+				out[i].Content = append([]sorus.Part{prefix}, out[i].Content...)
+				pendingTool = ""
+				return
+			}
+		}
+		pendingTool = ""
+	}
 	for _, m := range stored {
 		if m.Role == string(sorus.RoleSystem) {
 			continue
 		}
-		out = append(out, sorus.Message{
+		if m.Role == "tool" {
+			pendingTool = m.Content
+			continue
+		}
+		flush()
+		msg := sorus.Message{
 			Role: sorus.Role(m.Role),
 			Content: []sorus.Part{
 				sorus.Text{Value: m.Content},
 			},
-		})
+		}
+		out = append(out, msg)
 	}
+	flush() // any trailing tool row gets dropped (orphaned at end of session)
 	return out, nil
 }
 
