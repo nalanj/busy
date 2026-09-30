@@ -99,8 +99,23 @@ func (s *Server) Start() error {
 	var handler http.Handler = mux
 	if s.pathPrefix != "" {
 		handler = http.StripPrefix(s.pathPrefix, mux)
+		handler = s.exactPrefixRedirect(handler)
 	}
 	return http.ListenAndServe(s.addr, handler)
+}
+
+// exactPrefixRedirect wraps a handler so requests for the configured path
+// prefix exactly (without a trailing slash) are redirected to prefix + "/".
+// Without this, http.StripPrefix + ServeMux redirects empty paths to "/",
+// which loses the prefix and sends the user to the wrong upstream.
+func (s *Server) exactPrefixRedirect(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == s.pathPrefix {
+			http.Redirect(w, r, s.pathPrefix+"/", http.StatusTemporaryRedirect)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleStyle(w http.ResponseWriter, r *http.Request) {
