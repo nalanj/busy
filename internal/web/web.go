@@ -472,28 +472,7 @@ send
 `)
 
 	if s.systemPrompt != "" {
-		// Split system prompt from completion instructions
-		promptLines := strings.Split(s.systemPrompt, "\n")
-		var mainPrompt, completionHint []string
-		isCompletion := false
-		for _, line := range promptLines {
-			if strings.Contains(line, "<<<<<DONE") {
-				isCompletion = true
-				continue
-			}
-			if isCompletion {
-				completionHint = append(completionHint, line)
-			} else {
-				mainPrompt = append(mainPrompt, line)
-			}
-		}
-
-		if len(mainPrompt) > 0 {
-			sb.WriteString(`<div class="prompt-text">` + html.EscapeString(strings.TrimSpace(strings.Join(mainPrompt, "\n"))) + `</div>`)
-		}
-		if len(completionHint) > 0 {
-			sb.WriteString(`<div class="prompt-text secondary">` + html.EscapeString(strings.TrimSpace(strings.Join(completionHint, "\n"))) + `</div>`)
-		}
+		sb.WriteString(`<div class="prompt-text">` + html.EscapeString(strings.TrimSpace(s.systemPrompt)) + `</div>`)
 	} else {
 		sb.WriteString(`<div class="prompt-text secondary">No system prompt configured</div>`)
 	}
