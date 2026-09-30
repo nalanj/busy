@@ -260,14 +260,21 @@ func TestBuildSystemPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "/workspace") {
 		t.Error("Expected workspace in prompt")
 	}
+	if !strings.Contains(prompt, "<<<<<DONE>>>>>") {
+		t.Error("Expected DONE completion instruction in prompt")
+	}
 }
 
 func TestBuildSystemPromptMinimal(t *testing.T) {
-	if prompt := BuildSystemPrompt("", "", []sorus.Tool{}, []Skill{}, ""); prompt != "" {
-		t.Errorf("Expected empty prompt for empty agent name, got: %s", prompt)
+	// Even with empty inputs, the DONE completion instruction is always added.
+	if prompt := BuildSystemPrompt("", "", []sorus.Tool{}, []Skill{}, ""); prompt == "" {
+		t.Error("Expected DONE instruction even with empty inputs")
 	}
 	if prompt := BuildSystemPrompt("You are helpful.", "", []sorus.Tool{}, []Skill{}, ""); !strings.Contains(prompt, "You are helpful.") {
 		t.Error("Expected body in prompt")
+	}
+	if prompt := BuildSystemPrompt("You are helpful.", "", []sorus.Tool{}, []Skill{}, ""); !strings.Contains(prompt, "<<<<<DONE>>>>>") {
+		t.Error("Expected DONE instruction in prompt")
 	}
 }
 

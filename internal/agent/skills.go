@@ -203,5 +203,8 @@ func BuildSystemPrompt(agentBody string, agentName string, tools []sorus.Tool, s
 		parts = append(parts, "", BuildSkillsSection(skills))
 	}
 
+	// Completion protocol - applies to every turn
+	parts = append(parts, "", "When you have finished responding, output `<<<<<DONE>>>>>` on its own line to signal completion.")
+
 	return strings.Join(parts, "\n")
 }
