@@ -3,5 +3,5 @@ dist/
 state/
 state.bak
 oldstate
-config/
+/config/
 catwalk-configs/

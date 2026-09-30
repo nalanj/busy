@@ -26,19 +26,6 @@ jobs:
       - name: Download modules
         run: go mod download
 
-      - name: Debug
-        run: |
-          pwd
-          ls -la
-          cat go.mod
-          go env GOMOD GOFLAGS GOWORK
-          echo "---internal/---"
-          ls -laR internal/
-          echo "---git ls-files---"
-          git ls-files | head -50
-          echo "---grep imports---"
-          head -25 internal/agent/agent.go
-
       - name: Vet
         run: go vet ./...
 
