@@ -32,10 +32,10 @@ jobs:
           ls -la
           cat go.mod
           go env GOMOD GOFLAGS GOWORK
-          echo "---go list---"
-          go list ./...
-          echo "---go mod why---"
-          go mod why github.com/nalanj/busy/internal/config
+          echo "---internal/---"
+          ls -laR internal/
+          echo "---git ls-files---"
+          git ls-files | head -50
           echo "---grep imports---"
           head -25 internal/agent/agent.go
 
