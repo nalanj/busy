@@ -23,6 +23,7 @@ agent:
   state_dir: "~/.local/share/aadc"  # optional, defaults to ~/.local/share/aadc
   skills_dir: "~/.config/aadc/skills"  # optional
   listen_addr: "127.0.0.1:8080"  # optional, enables web UI
+  path_prefix: "/agent1"  # optional, for path-based reverse-proxy routing (Caddy)
 
   compaction:
     retain_tokens: 20000
@@ -128,6 +129,11 @@ When `listen_addr` is configured, AADC starts a simple web server displaying the
 - All messages with roles color-coded
 - Compaction markers showing when sessions were compacted
 - Long content is truncated (2000 chars) with total length shown
+
+When `path_prefix` is set, AADC serves its UI under that prefix (e.g. `/agent1/style.css`).
+This lets multiple agents share one hostname via a Caddy-style reverse proxy that
+routes by path. The server strips the prefix from incoming requests, and emits
+prefix-aware URLs in its HTML/JS so browser-side navigation keeps working.
 
 ## Docker
 

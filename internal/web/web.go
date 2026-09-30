@@ -18,6 +18,7 @@ var staticFS embed.FS
 
 type Server struct {
 	addr          string
+	pathPrefix    string
 	store         *storage.Store
 	queue         *queue.Queue
 	agentName     string
@@ -70,6 +71,15 @@ func (s *Server) SetJobs(jobs []struct{ Name, Schedule, Prompt string }) {
 	s.jobs = jobs
 }
 
+// SetPathPrefix configures the URL prefix under which the agent is served.
+// Used by Caddy/reverse-proxy setups where multiple agents share a hostname
+// via path-based routing (e.g. example.com/agent1, example.com/agent2).
+// A leading "/" is required; trailing "/" is normalized away. Empty string
+// means root-only deployment.
+func (s *Server) SetPathPrefix(prefix string) {
+	s.pathPrefix = strings.TrimRight(prefix, "/")
+}
+
 func (s *Server) SetWebMessageJobs(jobs []queue.WebMessageJob, emitter func(queue.Job)) {
 	s.webMsgJobs = jobs
 	s.webMsgEmitter = emitter
@@ -80,11 +90,17 @@ func (s *Server) SSEHub() *SSEHub {
 }
 
 func (s *Server) Start() error {
-	http.HandleFunc("/style.css", s.handleStyle)
-	http.HandleFunc("/", s.handleIndex)
-	http.HandleFunc("/events", s.handleEvents)
-	http.HandleFunc("/web-message", s.handleWebMessage)
-	return http.ListenAndServe(s.addr, nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/style.css", s.handleStyle)
+	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/events", s.handleEvents)
+	mux.HandleFunc("/web-message", s.handleWebMessage)
+
+	var handler http.Handler = mux
+	if s.pathPrefix != "" {
+		handler = http.StripPrefix(s.pathPrefix, mux)
+	}
+	return http.ListenAndServe(s.addr, handler)
 }
 
 func (s *Server) handleStyle(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +206,7 @@ func (s *Server) renderHTML(meta *storage.Metadata, messages []storage.Message, 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="` + s.pathPrefix + `/style.css">
 </head>
 <body>
 <div class="app">
@@ -531,6 +547,8 @@ send
 </div>
 
 <script>
+const PREFIX = ` + jsStringLiteral(s.pathPrefix) + `;
+function url(p) { return PREFIX + '/' + p; }
 const sendBtn = document.getElementById('send-btn');
 const msgModal = document.getElementById('msg-modal');
 const closeModal = document.getElementById('close-modal');
@@ -544,7 +562,7 @@ const promptInput = document.getElementById('prompt-input');
 
 // Set active tab based on URL on page load
 (function() {
-    const path = window.location.pathname.slice(1) || 'log';
+    const path = (window.location.pathname.startsWith(PREFIX + '/') ? window.location.pathname.slice(PREFIX.length + 1) : window.location.pathname.slice(PREFIX.length ? PREFIX.length + 1 : 1)) || 'log';
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     const tab = document.querySelector('.tab[data-tab="' + path + '"]');
@@ -568,7 +586,7 @@ document.querySelectorAll('.tab').forEach(tab => {
         document.getElementById('panel-' + tabName).classList.add('active');
         
         // Update URL without reloading
-        history.pushState({tab: tabName}, '', '/' + tabName);
+        history.pushState({tab: tabName}, '', PREFIX + '/' + tabName);
     });
 });
 
@@ -631,7 +649,7 @@ if (msgForm) {
         submitBtn.disabled = true;
         
         try {
-            const resp = await fetch('/web-message', {
+            const resp = await fetch(url('web-message'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message })
@@ -671,7 +689,7 @@ promptModal.addEventListener('click', (e) => {
 });
 
 function connectSSE() {
-    const events = new EventSource('/events');
+    const events = new EventSource(url('events'));
     const sseDot = document.getElementById('sse-dot');
     const sseText = document.getElementById('sse-text');
     
@@ -849,6 +867,14 @@ func (s *Server) getJobMeta(job queue.Job) string {
 		return "link · added " + formatTime(job.EnqueuedAt)
 	}
 	return "job · added " + formatTime(job.EnqueuedAt)
+}
+
+// jsStringLiteral returns a JSON-encoded string suitable for embedding as a
+// JS string literal constant. JSON encoding is a superset of JS string syntax
+// for our needs (no </script>, no special chars in a path prefix).
+func jsStringLiteral(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 func formatTime(t time.Time) string {

@@ -85,6 +85,7 @@ func main() {
 		server := web.New(cfg.Agent.ListenAddr, runner.Store(), jobQueue, cfg.Agent.Name)
 		runner.SetEmitter(server.SSEHub())
 		web.SetGlobalEmitter(server.SSEHub())
+		server.SetPathPrefix(cfg.Agent.PathPrefix)
 		server.SetSystemPrompt(cfg.Agent.System)
 		server.SetModelName(cfg.Agent.Model)
 		server.SetDoneToken("<<<<<DONE>>>>>")
