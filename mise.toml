@@ -2,10 +2,10 @@
 go = "latest"
 
 [tasks.build]
-run = "go build -o dist/aadc ./cmd/aadc/"
+run = "go build -o dist/busy ./cmd/busy/"
 
 [tasks.docker-build]
-run = "go build -o dist/aadc ./cmd/aadc/ && docker build -t nalanj/aadc ."
+run = "go build -o dist/busy ./cmd/busy/ && docker build -t nalanj/busy ."
 
 [tasks.docker-clean]
 run = "docker image prune -f"

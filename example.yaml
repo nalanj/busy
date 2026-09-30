@@ -5,7 +5,7 @@ agent:
   system: "You are a helpful assistant that responds briefly."
   thinking: low
   listen_addr: "127.0.0.1:8080"
-  skills_dir: ~/.config/aadc/skills
+  skills_dir: ~/.config/busy/skills
 
 jobs:
   - name: setup

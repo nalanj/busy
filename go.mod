@@ -1,4 +1,4 @@
-module github.com/nalanj/aadc
+module github.com/nalanj/busy
 
 go 1.26.6
 

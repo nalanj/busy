@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nalanj/aadc/internal/agent"
-	"github.com/nalanj/aadc/internal/config"
-	"github.com/nalanj/aadc/internal/queue"
-	"github.com/nalanj/aadc/internal/scheduler"
-	"github.com/nalanj/aadc/internal/web"
+	"github.com/nalanj/busy/internal/agent"
+	"github.com/nalanj/busy/internal/config"
+	"github.com/nalanj/busy/internal/queue"
+	"github.com/nalanj/busy/internal/scheduler"
+	"github.com/nalanj/busy/internal/web"
 )
 
 // LogEntry represents a structured log entry
@@ -92,9 +92,9 @@ func main() {
 
 		// Get workspace path
 		home, _ := os.UserHomeDir()
-		workspace := "/root/.local/share/aadc/workspace"
+		workspace := "/root/.local/share/busy/workspace"
 		if home != "" {
-			workspace = filepath.Join(home, ".local", "share", "aadc", cfg.Agent.Name, "workspace")
+			workspace = filepath.Join(home, ".local", "share", "busy", cfg.Agent.Name, "workspace")
 		}
 		server.SetWorkspace(workspace)
 

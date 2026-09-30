@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/nalanj/aadc/internal/storage"
+	"github.com/nalanj/busy/internal/storage"
 	"github.com/nalanj/sorus"
 )
 

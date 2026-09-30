@@ -14,8 +14,8 @@ import (
 
 	"io"
 
-	"github.com/nalanj/aadc/internal/config"
-	"github.com/nalanj/aadc/internal/storage"
+	"github.com/nalanj/busy/internal/config"
+	"github.com/nalanj/busy/internal/storage"
 	"github.com/nalanj/sorus"
 )
 
@@ -113,11 +113,11 @@ func New(ctx context.Context, cfg *config.AgentConfig) (*Runner, error) {
 		return nil, err
 	}
 
-	// Resolve state dir (default ~/.local/share/aadc).
+	// Resolve state dir (default ~/.local/share/busy).
 	stateDir := cfg.StateDir
 	if stateDir == "" {
 		home, _ := os.UserHomeDir()
-		stateDir = filepath.Join(home, ".local", "share", "aadc")
+		stateDir = filepath.Join(home, ".local", "share", "busy")
 	} else if strings.HasPrefix(stateDir, "~/") {
 		home, _ := os.UserHomeDir()
 		stateDir = filepath.Join(home, stateDir[2:])
@@ -137,7 +137,7 @@ func New(ctx context.Context, cfg *config.AgentConfig) (*Runner, error) {
 
 	// Ensure workspace exists for the system prompt.
 	home, _ := os.UserHomeDir()
-	workspace := filepath.Join(home, ".local", "share", "aadc", cfg.Name, "workspace")
+	workspace := filepath.Join(home, ".local", "share", "busy", cfg.Name, "workspace")
 	if err := os.MkdirAll(workspace, 0755); err != nil {
 		return nil, fmt.Errorf("creating workspace: %w", err)
 	}

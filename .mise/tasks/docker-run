@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run an AADC agent in an isolated Docker container
+# Run a busy agent in an isolated Docker container
 # Usage: docker-run --config <path>
 
 set -e
@@ -26,8 +26,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Build image if needed
-if ! docker image inspect nalanj/aadc:latest &>/dev/null; then
-    echo "Building AADC image..."
+if ! docker image inspect nalanj/busy:latest &>/dev/null; then
+    echo "Building busy image..."
     mise run docker-build
 fi
 
@@ -37,13 +37,13 @@ mkdir -p state
 # Run container - FULLY ISOLATED
 docker run \
     --rm \
-    --name "aadc" \
-    --hostname "aadc" \
+    --name "busy" \
+    --hostname "busy" \
     --network host \
     -e ANTHROPIC_API_KEY \
     -e OPENAI_API_KEY \
     -v "$CONFIG_FILE:/config/agent.yaml:ro" \
-    -v "$PROJECT_DIR/state:/root/.local/share/aadc" \
+    -v "$PROJECT_DIR/state:/root/.local/share/busy" \
     -w /workspace \
-    nalanj/aadc:latest \
+    nalanj/busy:latest \
     --config /config/agent.yaml

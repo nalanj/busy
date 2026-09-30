@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nalanj/aadc/internal/queue"
-	"github.com/nalanj/aadc/internal/storage"
+	"github.com/nalanj/busy/internal/queue"
+	"github.com/nalanj/busy/internal/storage"
 )
 
 //go:embed style.css

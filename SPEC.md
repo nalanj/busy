@@ -1,13 +1,13 @@
-# AADC - Autonomous Agent Daemon with Cron
+# busy - Autonomous Agent Daemon with Cron
 
 ## Overview
 
-AADC runs AI agents as standalone processes, each with their own scheduled jobs defined in a config file. No inter-agent messaging - each agent is independent.
+busy runs AI agents as standalone processes, each with their own scheduled jobs defined in a config file. No inter-agent messaging - each agent is independent.
 
 ## Usage
 
 ```bash
-aadc --config /path/to/agent.yaml
+busy --config /path/to/agent.yaml
 ```
 
 ## Config Format (YAML)
@@ -20,8 +20,8 @@ agent:
   model: "claude-sonnet-4-20250514"
   system: "You are a helpful assistant."
   thinking: "low"  # or disabled/low/medium/high/very_high/max, or a number
-  state_dir: "~/.local/share/aadc"  # optional, defaults to ~/.local/share/aadc
-  skills_dir: "~/.config/aadc/skills"  # optional
+  state_dir: "~/.local/share/busy"  # optional, defaults to ~/.local/share/busy
+  skills_dir: "~/.config/busy/skills"  # optional
   listen_addr: "127.0.0.1:8080"  # optional, enables web UI
   path_prefix: "/agent1"  # optional, for path-based reverse-proxy routing (Caddy)
 
@@ -109,7 +109,7 @@ This skill covers...
 
 Skills are loaded from subdirectories in the skills directory:
 ```
-~/.config/aadc/skills/
+~/.config/busy/skills/
 ├── golang-testing/
 │   └── SKILL.md
 ├── bash-scripting/
@@ -122,7 +122,7 @@ When a skill is loaded, its content is included in the agent's system prompt wit
 
 ## Web UI
 
-When `listen_addr` is configured, AADC starts a simple web server displaying the current session:
+When `listen_addr` is configured, busy starts a simple web server displaying the current session:
 
 - Session metadata (number, message count, last updated)
 - Job queue status and pending jobs
@@ -130,14 +130,14 @@ When `listen_addr` is configured, AADC starts a simple web server displaying the
 - Compaction markers showing when sessions were compacted
 - Long content is truncated (2000 chars) with total length shown
 
-When `path_prefix` is set, AADC serves its UI under that prefix (e.g. `/agent1/style.css`).
+When `path_prefix` is set, busy serves its UI under that prefix (e.g. `/agent1/style.css`).
 This lets multiple agents share one hostname via a Caddy-style reverse proxy that
 routes by path. The server strips the prefix from incoming requests, and emits
 prefix-aware URLs in its HTML/JS so browser-side navigation keeps working.
 
 ## Docker
 
-AADC runs in a Docker container for isolation:
+busy runs in a Docker container for isolation:
 
 ```bash
 # Build everything
@@ -163,7 +163,7 @@ Environment variables like `ANTHROPIC_API_KEY` are passed through.
 ## Project Structure
 
 ```
-cmd/aadc/main.go      # Entry point
+cmd/busy/main.go      # Entry point
 internal/
   config/             # YAML config loading
   agent/              # Agent runner and manual loop on top of github.com/nalanj/sorus
@@ -175,7 +175,7 @@ internal/
 Sessions are persisted to JSONL files for each agent:
 
 ```
-~/.local/share/aadc/{agent_name}/
+~/.local/share/busy/{agent_name}/
 ├── meta.json           # Session metadata
 ├── session_001.jsonl   # First session
 ├── session_002.jsonl   # After first compaction

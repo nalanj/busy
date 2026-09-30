@@ -1,13 +1,13 @@
 services:
-  aadc:
+  busy:
     build: .
-    image: nalanj/aadc:latest
-    container_name: aadc
+    image: nalanj/busy:latest
+    container_name: busy
     environment:
       - MINIMAX_API_KEY
     volumes:
       - ./config/example.yaml:/config/example.yaml:ro
-      - ./state:/root/.local/share/aadc
+      - ./state:/root/.local/share/busy
     network_mode: host
     command: ["--config", "/config/example.yaml"]
     stdin_open: true

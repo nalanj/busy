@@ -26,9 +26,9 @@ RUN groupadd -g ${HOST_GID} ${USERNAME} \
     && echo "${USERNAME} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Copy agent binary from dist/
-COPY dist/aadc /usr/local/bin/aadc
+COPY dist/busy /usr/local/bin/busy
 
 USER root
 WORKDIR /workspace
 
-ENTRYPOINT ["/usr/local/bin/aadc"]
+ENTRYPOINT ["/usr/local/bin/busy"]
