@@ -6,7 +6,34 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	cfg, err := Load("/home/nalanj/Source/nalanj/busy/example.yaml")
+	const yaml = `
+agent:
+  name: test-agent
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+  system: "You are a helpful assistant that responds briefly."
+  thinking: low
+  listen_addr: "127.0.0.1:8080"
+  skills_dir: ~/.config/busy/skills
+
+jobs:
+  - name: setup
+    schedule: "@session-start"
+    prompt: |
+      Say hello and then say DONE.
+`
+	tmpfile, err := os.CreateTemp("", "config-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.WriteString(yaml); err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	cfg, err := Load(tmpfile.Name())
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
