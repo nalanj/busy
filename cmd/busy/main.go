@@ -86,7 +86,7 @@ func main() {
 		runner.SetEmitter(server.SSEHub())
 		web.SetGlobalEmitter(server.SSEHub())
 		server.SetPathPrefix(cfg.Agent.PathPrefix)
-		server.SetSystemPrompt(cfg.Agent.System)
+		server.SetSystemPrompt(runner.SystemPrompt())
 		server.SetModelName(cfg.Agent.Model)
 		server.SetDoneToken("<<<<<DONE>>>>>")
 

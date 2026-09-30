@@ -89,6 +89,13 @@ type Runner struct {
 	sse          SSEEmitter
 }
 
+// SystemPrompt returns the fully composed system prompt sent to the LLM
+// on every turn (agent body, workspace, tools, skills, and completion
+// protocol). Useful for surfacing it in UIs.
+func (r *Runner) SystemPrompt() string {
+	return r.systemPrompt
+}
+
 // New loads the sorus catalog, builds a client for the configured provider,
 // resolves the model, and constructs a Runner. The agent's workspace is
 // created under the state dir.
