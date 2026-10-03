@@ -28,7 +28,7 @@ RUN groupadd -g ${HOST_GID} ${USERNAME} \
 # Copy agent binary from dist/
 COPY dist/busy /usr/local/bin/busy
 
-USER root
+USER ${USERNAME}
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/local/bin/busy"]

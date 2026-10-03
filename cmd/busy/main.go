@@ -92,7 +92,7 @@ func main() {
 
 		// Get workspace path
 		home, _ := os.UserHomeDir()
-		workspace := "/root/.local/share/busy/workspace"
+		workspace := ""
 		if home != "" {
 			workspace = filepath.Join(home, ".local", "share", "busy", cfg.Agent.Name, "workspace")
 		}
