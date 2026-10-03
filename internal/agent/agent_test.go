@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/nalanj/sorus"
+	"github.com/nalanj/busy/internal/storage"
 )
 
 func TestCheckPreconditions(t *testing.T) {
@@ -328,5 +329,36 @@ func TestSummarizeArgs(t *testing.T) {
 	}
 	if len(got) > 104 {
 		t.Errorf("expected <= 104 chars, got %d", len(got))
+	}
+}
+
+// Verifies that appendDoneMarkerToLast updates the most recent
+// assistant message in place to end with the DONE marker, and returns
+// the appended text.
+func TestAppendDoneMarkerToLast(t *testing.T) {
+	store, err := storage.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	if err := store.AddMessage(storage.Message{Role: "user", Content: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddMessage(storage.Message{Role: "assistant", Content: "hello back"}); err != nil {
+		t.Fatal(err)
+	}
+
+	appended := appendDoneMarkerToLast(store, "hello back")
+	if !strings.HasSuffix(appended, "<<<<<DONE>>>>>") {
+		t.Errorf("returned text missing marker: %q", appended)
+	}
+
+	msgs, err := store.GetMessages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(msgs[len(msgs)-1].Content, "<<<<<DONE>>>>>") {
+		t.Errorf("stored message not updated: %q", msgs[len(msgs)-1].Content)
 	}
 }

@@ -229,13 +229,6 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 	currentPrompt := prompt + "\n\nWhen finished, respond with '<<<<<DONE>>>>>'."
 	initialPrompt := currentPrompt
 
-	// Number of times we've nudged the model to emit the DONE marker.
-	// Capped to avoid burning iterations (and tokens) on a model that
-	// simply won't comply.
-	nudgeCount := 0
-	const maxNudges = 1
-	const nudgeMessage = "Your previous turn ended without the `<<<<<DONE>>>>>` marker that signals completion. Please respond with just that marker on its own line to finish this turn."
-
 	for iteration := 0; iteration < maxIterations; iteration++ {
 		// Build the next request from scratch each iteration.
 		// Sorus's req.Clone() supports this efficiently.
@@ -282,18 +275,24 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			r.sse.Emit("agent", map[string]string{"content": text})
 		}
 
-		// Append the assistant turn to in-memory history. This must
-		// happen before the nudge check below so that the model sees
-		// its own previous text on the next iteration.
-		assistantContent := response.Message.Content
-		if len(assistantContent) == 0 && text != "" {
-			assistantContent = []sorus.Part{sorus.Text{Value: text}}
+		// Done marker check. If the model finished its turn (no tool
+		// calls) without emitting the marker, append it ourselves — the
+		// marker is a protocol signal the agent runner owns, and some
+		// models don't reliably emit it even when instructed.
+		if !isDone(text) && len(response.Message.ToolCalls) == 0 {
+			if text == "" {
+				// Empty turn with no tool calls — exit cleanly.
+				logf("info", "done", "model returned empty turn, exiting")
+				if r.sse != nil {
+					r.sse.Emit("done", map[string]any{"message": "empty turn"})
+				}
+				return nil
+			}
+			text = appendDoneMarkerToLast(r.store, text)
+			if r.sse != nil {
+				r.sse.Emit("agent", map[string]string{"content": text})
+			}
 		}
-		messages = append(messages, sorus.Message{
-			Role:      sorus.RoleAssistant,
-			Content:   assistantContent,
-			ToolCalls: response.Message.ToolCalls,
-		})
 
 		// Done marker check.
 		if isDone(text) {
@@ -309,30 +308,16 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			return nil
 		}
 
-		// No tool calls and no DONE marker. The model finished a turn
-		// without honoring the protocol. Nudge it (capped) before giving
-		// up — the marker is part of the contract, not something the
-		// runner should silently patch over.
-		if len(response.Message.ToolCalls) == 0 {
-			if text == "" {
-				logf("warn", "agent", "model returned empty turn with no tool calls; giving up")
-				if r.sse != nil {
-					r.sse.Emit("error", map[string]string{"message": "model returned empty turn"})
-				}
-				return fmt.Errorf("model returned empty turn with no tool calls")
-			}
-			if nudgeCount >= maxNudges {
-				logf("warn", "agent", "model did not emit DONE marker after %d nudge(s); giving up", maxNudges)
-				if r.sse != nil {
-					r.sse.Emit("error", map[string]string{"message": "model did not complete turn with DONE marker"})
-				}
-				return fmt.Errorf("model did not complete turn with DONE marker after %d nudge(s)", maxNudges)
-			}
-			nudgeCount++
-			logf("info", "agent", "model stopped without DONE marker; nudging (attempt %d/%d)", nudgeCount, maxNudges)
-			currentPrompt = nudgeMessage
-			continue
+		// Append the assistant turn with tool calls to history.
+		assistantContent := response.Message.Content
+		if len(assistantContent) == 0 && text != "" {
+			assistantContent = []sorus.Part{sorus.Text{Value: text}}
 		}
+		messages = append(messages, sorus.Message{
+			Role:      sorus.RoleAssistant,
+			Content:   assistantContent,
+			ToolCalls: response.Message.ToolCalls,
+		})
 
 		// Execute tools and accumulate results.
 		var toolParts []sorus.Part
@@ -554,4 +539,25 @@ func CheckPreconditions(commands []string) error {
 		}
 	}
 	return nil
+}
+
+// appendDoneMarkerToLast updates the most recent assistant message in
+// the store to end with the DONE marker, and returns the updated text.
+// Used to normalize completion when the model finishes a turn without
+// explicitly emitting the marker.
+func appendDoneMarkerToLast(store *storage.Store, original string) string {
+	appended := original + "\n\n" + doneMarker
+	msgs, err := store.GetMessages()
+	if err != nil || len(msgs) == 0 {
+		return appended
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != "assistant" {
+		return appended
+	}
+	last.Content = appended
+	if err := store.UpdateMessage(last); err != nil {
+		logf("warn", "session", "failed to append DONE marker to last message: %v", err)
+	}
+	return appended
 }
