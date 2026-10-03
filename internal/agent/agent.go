@@ -275,6 +275,25 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			r.sse.Emit("agent", map[string]string{"content": text})
 		}
 
+		// Done marker check. If the model finished its turn (no tool
+		// calls) without emitting the marker, append it ourselves — the
+		// marker is a protocol signal the agent runner owns, and some
+		// models don't reliably emit it even when instructed.
+		if !isDone(text) && len(response.Message.ToolCalls) == 0 {
+			if text == "" {
+				// Empty turn with no tool calls — exit cleanly.
+				logf("info", "done", "model returned empty turn, exiting")
+				if r.sse != nil {
+					r.sse.Emit("done", map[string]any{"message": "empty turn"})
+				}
+				return nil
+			}
+			text = appendDoneMarkerToLast(r.store, text)
+			if r.sse != nil {
+				r.sse.Emit("agent", map[string]string{"content": text})
+			}
+		}
+
 		// Done marker check.
 		if isDone(text) {
 			meta, _ := r.store.GetMetadata()
@@ -285,16 +304,6 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			logf("info", "done", "completed with %d total messages", msgCount)
 			if r.sse != nil {
 				r.sse.Emit("done", map[string]any{"message": fmt.Sprintf("completed with %d total messages", msgCount)})
-			}
-			return nil
-		}
-
-		// No tool calls → no more work possible.
-		if len(response.Message.ToolCalls) == 0 {
-			// Model stopped without a done marker and no tool calls.
-			logf("warn", "agent", "model stopped without DONE marker (stop_reason=%s)", response.StopReason)
-			if r.sse != nil {
-				r.sse.Emit("done", map[string]any{"message": "model stopped without completion marker"})
 			}
 			return nil
 		}
@@ -530,4 +539,25 @@ func CheckPreconditions(commands []string) error {
 		}
 	}
 	return nil
+}
+
+// appendDoneMarkerToLast updates the most recent assistant message in
+// the store to end with the DONE marker, and returns the updated text.
+// Used to normalize completion when the model finishes a turn without
+// explicitly emitting the marker.
+func appendDoneMarkerToLast(store *storage.Store, original string) string {
+	appended := original + "\n\n" + doneMarker
+	msgs, err := store.GetMessages()
+	if err != nil || len(msgs) == 0 {
+		return appended
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != "assistant" {
+		return appended
+	}
+	last.Content = appended
+	if err := store.UpdateMessage(last); err != nil {
+		logf("warn", "session", "failed to append DONE marker to last message: %v", err)
+	}
+	return appended
 }
