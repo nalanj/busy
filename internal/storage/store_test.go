@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestNewStore(t *testing.T) {
@@ -52,6 +53,36 @@ func TestAddMessage(t *testing.T) {
 
 	if messages[0].Role != "user" {
 		t.Errorf("Expected role 'user', got '%s'", messages[0].Role)
+	}
+
+	// Timestamp should be set by AddMessage when the caller leaves it zero —
+	// the web UI renders zero timestamps as "never", which was a bug.
+	if messages[0].Timestamp.IsZero() {
+		t.Error("Expected AddMessage to stamp Timestamp when caller did not")
+	}
+}
+
+// Verifies that a caller-supplied timestamp is preserved (only zero
+// timestamps get auto-stamped).
+func TestAddMessagePreservesCallerTimestamp(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	callerTime := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	if err := store.AddMessage(Message{Role: "user", Content: "stamped", Timestamp: callerTime}); err != nil {
+		t.Fatalf("Failed to add message: %v", err)
+	}
+
+	messages, err := store.GetMessages()
+	if err != nil {
+		t.Fatalf("Failed to get messages: %v", err)
+	}
+	if !messages[0].Timestamp.Equal(callerTime) {
+		t.Errorf("Expected timestamp %v, got %v", callerTime, messages[0].Timestamp)
 	}
 }
 

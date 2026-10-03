@@ -111,6 +111,11 @@ func (s *Store) AddMessage(msg Message) error {
 		msg.ID = fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 
+	// Stamp the time if the caller didn't
+	if msg.Timestamp.IsZero() {
+		msg.Timestamp = time.Now()
+	}
+
 	// Find previous message ID
 	prevID := s.getLastMessageID(path)
 	if prevID != "" {
