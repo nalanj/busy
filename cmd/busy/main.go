@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nalanj/busy/internal/agent"
+	"github.com/nalanj/busy/internal/briefwatcher"
 	"github.com/nalanj/busy/internal/config"
 	"github.com/nalanj/busy/internal/queue"
 	"github.com/nalanj/busy/internal/scheduler"
@@ -188,6 +189,30 @@ func main() {
 				}
 				runningJobs[queuedJob.Name] = true
 				jobsMu.Unlock()
+
+				// Pre-flight check for the brief-watcher: scan the inbox
+				// against the state file. If nothing has changed, skip
+				// the LLM call entirely — this is the whole point of the
+				// brief-watcher, since polling at @every 5m would
+				// otherwise burn tokens on every tick.
+				if queuedJob.Name == "brief-watcher" {
+					pending, err := briefwatcher.Check("/inbox/briefs", "/home/agent/.local/share/busy/briefs-state.json")
+					if err != nil {
+						log("warn", "briefwatcher", fmt.Sprintf("pre-check failed: %v (proceeding anyway)", err))
+					} else if len(pending) == 0 {
+						log("info", "briefwatcher", "no pending briefs; skipping LLM call")
+						jobsMu.Lock()
+						delete(runningJobs, queuedJob.Name)
+						jobsMu.Unlock()
+						continue
+					} else {
+						names := make([]string, 0, len(pending))
+						for _, b := range pending {
+							names = append(names, b.Name)
+						}
+						log("info", "briefwatcher", fmt.Sprintf("%d pending brief(s): %s", len(pending), strings.Join(names, ", ")))
+					}
+				}
 
 				// Run the job
 				log("info", "queue", fmt.Sprintf("dequeued job %s", queuedJob.Name))
