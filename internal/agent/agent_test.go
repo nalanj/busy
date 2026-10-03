@@ -2,7 +2,9 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -144,6 +146,40 @@ func TestToolDispatchBash(t *testing.T) {
 	}
 	if strings.TrimSpace(got) != "hi" {
 		t.Errorf("got %q, want %q", got, "hi")
+	}
+}
+
+func TestToolDispatchGlobBothCallShapes(t *testing.T) {
+	// Set up a temp dir with two .md files and one .txt file
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "alpha.md"), []byte("a"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "beta.md"), []byte("b"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "ignore.txt"), []byte("c"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	specs := StandardTools()
+
+	// Shape 1: pattern-only with absolute path
+	got, err := dispatchTool(t.Context(), specs, "glob", fmt.Sprintf(`{"pattern": %q}`, filepath.Join(tmp, "*.md")))
+	if err != nil {
+		t.Fatalf("absolute-path pattern: %v", err)
+	}
+	if strings.Count(got, ".md") != 2 {
+		t.Errorf("absolute-path pattern: expected 2 .md matches, got %q", got)
+	}
+
+	// Shape 2: dir + relative pattern
+	got, err = dispatchTool(t.Context(), specs, "glob", fmt.Sprintf(`{"pattern": "*.md", "dir": %q}`, tmp))
+	if err != nil {
+		t.Fatalf("dir+pattern: %v", err)
+	}
+	if strings.Count(got, ".md") != 2 {
+		t.Errorf("dir+pattern: expected 2 .md matches, got %q", got)
 	}
 }
 

@@ -164,11 +164,21 @@ func globTool() ToolSpec {
 			if err := jsonUnmarshalStrict(argsJSON, &in); err != nil {
 				return "", err
 			}
-			dir := "."
-			if in.Dir != "" {
-				dir = in.Dir
+			// If pattern is an absolute path, use it directly — otherwise
+			// join dir (default ".") and pattern. This lets callers pass
+			// either {pattern: "*.md", dir: "/foo"} or
+			// {pattern: "/foo/*.md"}.
+			var target string
+			if filepath.IsAbs(in.Pattern) {
+				target = in.Pattern
+			} else {
+				dir := "."
+				if in.Dir != "" {
+					dir = in.Dir
+				}
+				target = filepath.Join(dir, in.Pattern)
 			}
-			matches, err := filepath.Glob(filepath.Join(dir, in.Pattern))
+			matches, err := filepath.Glob(target)
 			if err != nil {
 				return "", err
 			}
