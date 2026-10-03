@@ -32,6 +32,11 @@ RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
 # Copy agent binary from dist/
 COPY dist/busy /usr/local/bin/busy
 
+# Wrapper entrypoint that sets a permissive umask before execing the
+# binary, so anything the agent writes is editable from the host.
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # Pre-install Go for the agent user via mise so `go test`, `go build`,
 # etc. are available when the LLM's bash tool runs them. The busy repo's
 # mise.toml pins `go = "latest"`, so this also keeps the container in
@@ -45,4 +50,4 @@ ENV PATH=/home/agent/.local/share/mise/shims:$PATH
 
 WORKDIR /workspace
 
-ENTRYPOINT ["/usr/local/bin/busy"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
