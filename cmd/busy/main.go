@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"text/template"
 	"time"
 
 	"github.com/nalanj/busy/internal/agent"
@@ -194,7 +196,10 @@ func main() {
 				// against the state file. If nothing has changed, skip
 				// the LLM call entirely — this is the whole point of the
 				// brief-watcher, since polling at @every 5m would
-				// otherwise burn tokens on every tick.
+				// otherwise burn tokens on every tick. When there ARE
+				// pending briefs, render the job's prompt template with
+				// the list so the LLM doesn't have to rediscover them
+				// (which it has been doing unreliably).
 				if queuedJob.Name == "brief-watcher" {
 					pending, err := briefwatcher.Check("/inbox/briefs", "/home/agent/.local/share/busy/briefs-state.json")
 					if err != nil {
@@ -211,6 +216,12 @@ func main() {
 							names = append(names, b.Name)
 						}
 						log("info", "briefwatcher", fmt.Sprintf("%d pending brief(s): %s", len(pending), strings.Join(names, ", ")))
+						rendered, rerr := renderBriefWatcherPrompt(queuedJob.Prompt, pending)
+						if rerr != nil {
+							log("warn", "briefwatcher", fmt.Sprintf("prompt render failed: %v (proceeding with static prompt)", rerr))
+						} else {
+							queuedJob.Prompt = rendered
+						}
 					}
 				}
 
@@ -303,4 +314,23 @@ func runJobFromQueue(ctx context.Context, runner *agent.Runner, job *queue.Job) 
 	} else {
 		log("info", "job", fmt.Sprintf("job %s completed", job.Name))
 	}
+}
+
+// renderBriefWatcherPrompt renders the brief-watcher job's prompt
+// template with the list of pending briefs. The template uses
+// text/template syntax (so `{{.Briefs}}` and friends work); the
+// data passed in has a Briefs field (a slice of briefwatcher.Brief
+// values with Name, Path, Mtime, Sha).
+func renderBriefWatcherPrompt(tmplSrc string, pending []briefwatcher.Brief) (string, error) {
+	tmpl, err := template.New("briefwatcher").Parse(tmplSrc)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, struct {
+		Briefs []briefwatcher.Brief
+	}{Briefs: pending}); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
