@@ -20,6 +20,13 @@ import (
 )
 
 const doneMarker = "<<<<<DONE>>>>>"
+
+// nudgeMessage is the follow-up sent to a model that finished a turn
+// without emitting the DONE marker. The model is expected to comply
+// and respond with the marker on its own line; if it doesn't, the loop
+// re-sends the nudge on every iteration (capped only by maxIterations
+// in the Run loop itself).
+const nudgeMessage = "Your previous turn ended without the `<<<<<DONE>>>>>` marker that signals completion. Please respond with just that marker on its own line to finish this turn."
 const maxIterations = 100
 const maxCompactionRetries = 1
 
@@ -275,6 +282,19 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			r.sse.Emit("agent", map[string]string{"content": text})
 		}
 
+		// Always append the assistant turn to in-memory history so the
+		// model sees its own previous text on the next iteration (the
+		// nudge path below depends on this).
+		assistantContent := response.Message.Content
+		if len(assistantContent) == 0 && text != "" {
+			assistantContent = []sorus.Part{sorus.Text{Value: text}}
+		}
+		messages = append(messages, sorus.Message{
+			Role:      sorus.RoleAssistant,
+			Content:   assistantContent,
+			ToolCalls: response.Message.ToolCalls,
+		})
+
 		// Done marker check.
 		if isDone(text) {
 			meta, _ := r.store.GetMetadata()
@@ -289,26 +309,16 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			return nil
 		}
 
-		// No tool calls → no more work possible.
+		// No tool calls and no DONE marker. The model finished a turn
+		// without honoring the protocol. Nudge it on the next iteration
+		// rather than silently patching the marker in or silently
+		// exiting. The maxIterations bound on the outer loop is the only
+		// safety net; in practice the model complies within 1–2 nudges.
 		if len(response.Message.ToolCalls) == 0 {
-			// Model stopped without a done marker and no tool calls.
-			logf("warn", "agent", "model stopped without DONE marker (stop_reason=%s)", response.StopReason)
-			if r.sse != nil {
-				r.sse.Emit("done", map[string]any{"message": "model stopped without completion marker"})
-			}
-			return nil
+			logf("info", "agent", "model stopped without DONE marker; nudging (iteration %d)", iteration+1)
+			currentPrompt = nudgeMessage
+			continue
 		}
-
-		// Append the assistant turn with tool calls to history.
-		assistantContent := response.Message.Content
-		if len(assistantContent) == 0 && text != "" {
-			assistantContent = []sorus.Part{sorus.Text{Value: text}}
-		}
-		messages = append(messages, sorus.Message{
-			Role:      sorus.RoleAssistant,
-			Content:   assistantContent,
-			ToolCalls: response.Message.ToolCalls,
-		})
 
 		// Execute tools and accumulate results.
 		var toolParts []sorus.Part
