@@ -329,7 +329,7 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			}
 			logTool(tc.Name, summarizeArgs(argsJSON))
 
-			if err := saveToolCall(r.store, tc.Name, argsJSON); err != nil {
+			if err := saveToolCall(r.store, tc.Name, tc.ID, argsJSON); err != nil {
 				logf("warn", "session", "failed to save tool call: %v", err)
 			}
 			if r.sse != nil {
@@ -345,7 +345,7 @@ func (r *Runner) Run(ctx context.Context, prompt string, trigger string) error {
 			}
 			logf("debug", "tool_result", "%s", resultText)
 
-			if err := appendToolResult(r.store, tc.Name, resultText); err != nil {
+			if err := appendToolResult(r.store, tc.ID, resultText); err != nil {
 				logf("warn", "session", "failed to append tool result: %v", err)
 			}
 

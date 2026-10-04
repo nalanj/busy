@@ -25,6 +25,15 @@ type Message struct {
 	Content     string    `json:"content"`
 	Timestamp   time.Time `json:"timestamp"`
 	ToolName    string    `json:"tool_name,omitempty"`
+	// ToolCallID is the model's tool_use id, used to match a tool result
+	// back to the call that produced it. Empty for non-tool rows.
+	ToolCallID  string    `json:"tool_call_id,omitempty"`
+	// Args is the JSON-encoded arguments of a tool call. Stored alongside
+	// the result so the file format round-trips cleanly without flattening
+	// the call into the content text (which would put a "$ toolname args"
+	// pattern in the model's in-context history, teaching it to write
+	// tool calls as text instead of using the function-calling API).
+	Args        string    `json:"args,omitempty"`
 }
 
 // Metadata stores session metadata

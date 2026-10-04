@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nalanj/busy/internal/storage"
 	"github.com/nalanj/sorus"
 )
 
@@ -328,5 +329,69 @@ func TestSummarizeArgs(t *testing.T) {
 	}
 	if len(got) > 104 {
 		t.Errorf("expected <= 104 chars, got %d", len(got))
+	}
+}
+
+// Verifies the tool call + result round-trips through the store as
+// proper sorus.Message{Role: RoleTool, Content: [ToolResult]} with
+// the args in a separate field — NOT as a flattened "$ name args\nresult"
+// text blob that would teach the model to imitate that pattern in its
+// own responses.
+func TestToolCallRoundTrip(t *testing.T) {
+	store, err := storage.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	if err := saveToolCall(store, "bash", "toolu_abc123", `{"command":"ls"}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendToolResult(store, "toolu_abc123", "file1\nfile2"); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := loadMessages(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("expected 1 message after load, got %d", len(loaded))
+	}
+	msg := loaded[0]
+	if msg.Role != sorus.RoleTool {
+		t.Errorf("expected RoleTool, got %q", msg.Role)
+	}
+	if len(msg.Content) != 1 {
+		t.Fatalf("expected 1 part, got %d", len(msg.Content))
+	}
+	tr, ok := msg.Content[0].(sorus.ToolResult)
+	if !ok {
+		t.Fatalf("expected sorus.ToolResult, got %T", msg.Content[0])
+	}
+	if tr.ToolCallID != "toolu_abc123" {
+		t.Errorf("expected tool_call_id 'toolu_abc123', got %q", tr.ToolCallID)
+	}
+	if len(tr.Content) != 1 {
+		t.Fatalf("expected 1 result part, got %d", len(tr.Content))
+	}
+	txt, ok := tr.Content[0].(sorus.Text)
+	if !ok {
+		t.Fatalf("expected sorus.Text, got %T", tr.Content[0])
+	}
+	// The args should be rendered into the result text so the model
+	// can re-derive what call this was a response to. The result body
+	// itself must be present verbatim.
+	if !strings.Contains(txt.Value, "Call: bash({\"command\":\"ls\"})") {
+		t.Errorf("expected rendered call in result text, got: %q", txt.Value)
+	}
+	if !strings.Contains(txt.Value, "file1\nfile2") {
+		t.Errorf("expected result body in result text, got: %q", txt.Value)
+	}
+	// The critical regression check: the on-disk format must not put
+	// a "$ bash {...}" pattern in the result, or the next run's model
+	// will imitate it and stop using the function-calling API.
+	if strings.HasPrefix(txt.Value, "$ ") {
+		t.Errorf("result starts with '$ toolname' — the imitable pattern has come back")
 	}
 }

@@ -1,20 +1,26 @@
 package agent
 
 import (
-	"strings"
-
 	"github.com/nalanj/busy/internal/storage"
 	"github.com/nalanj/sorus"
 )
 
 // loadMessages reads persisted messages from the store and converts them
-// into the sorus form. The on-disk format pre-dates sorus; tool calls are
-// stored as "tool" rows with Content = "$ <name> <args>\n<result>".
-// Sorus's RoleTool Anthropic builder silently drops non-ToolResult parts,
-// which would produce empty messages. We work around that by merging each
-// historical tool row's content into the *following* assistant message as
-// a Text part, so the model still sees the tool invocation + result in
-// its conversation history.
+// into the sorus form. Tool rows are reconstructed as proper
+// sorus.Message{Role: RoleTool, Content: []sorus.Part{ToolResult{...}}}
+// — the same shape the agent builds in memory during a live run, and
+// the same shape the function-calling API expects.
+//
+// The previous implementation flattened the tool call and result into a
+// single "$ name args\n<result>" text blob and prepended it to the next
+// user/assistant message. That put an imitable "$ toolname {args...}"
+// pattern in every conversation turn. After enough turns the model
+// started writing tool calls as text in its own content field rather
+// than as proper API tool_use blocks — the agent would then save the
+// fake "File written: ..." confirmation, which the next run would
+// re-inject as in-context history, and so on. Storing the call and
+// result in separate fields and loading them as proper tool-result
+// messages breaks that feedback loop.
 //
 // System roles are skipped (the system prompt is supplied separately on
 // each Request).
@@ -24,41 +30,39 @@ func loadMessages(store *storage.Store) ([]sorus.Message, error) {
 		return nil, err
 	}
 	out := make([]sorus.Message, 0, len(stored))
-	var pendingTool string
-	flush := func() {
-		if pendingTool == "" {
-			return
-		}
-		// Find last assistant turn (or user turn if no assistant has been seen yet)
-		// and prepend the tool context as a Text part.
-		for i := len(out) - 1; i >= 0; i-- {
-			if out[i].Role == sorus.RoleAssistant || out[i].Role == sorus.RoleUser {
-				prefix := sorus.Text{Value: pendingTool}
-				out[i].Content = append([]sorus.Part{prefix}, out[i].Content...)
-				pendingTool = ""
-				return
-			}
-		}
-		pendingTool = ""
-	}
 	for _, m := range stored {
 		if m.Role == string(sorus.RoleSystem) {
 			continue
 		}
 		if m.Role == "tool" {
-			pendingTool = m.Content
+			// Render as a proper tool-result message. Include the original
+			// call args (if stored) so the model can re-derive what call
+			// this was a response to — since we don't keep the
+			// assistant's tool call alongside the result.
+			result := m.Content
+			if m.Args != "" {
+				result = "Call: " + m.ToolName + "(" + m.Args + ")\nResult: " + m.Content
+			}
+			out = append(out, sorus.Message{
+				Role: sorus.RoleTool,
+				Content: []sorus.Part{
+					sorus.ToolResult{
+						ToolCallID: m.ToolCallID,
+						Content: []sorus.Part{
+							sorus.Text{Value: result},
+						},
+					},
+				},
+			})
 			continue
 		}
-		flush()
-		msg := sorus.Message{
+		out = append(out, sorus.Message{
 			Role: sorus.Role(m.Role),
 			Content: []sorus.Part{
 				sorus.Text{Value: m.Content},
 			},
-		}
-		out = append(out, msg)
+		})
 	}
-	flush() // any trailing tool row gets dropped (orphaned at end of session)
 	return out, nil
 }
 
@@ -81,38 +85,45 @@ func saveAssistantText(store *storage.Store, text string) error {
 	})
 }
 
-// saveToolCall saves an assistant tool call as a "tool" message seeded
-// with "$ <name> <args>", matching the historic shape. The matching
-// tool-result message is appended by appendToolResult.
-func saveToolCall(store *storage.Store, name, argsJSON string) error {
-	summary := argsJSON
-	if len(summary) > 100 {
-		summary = summary[:100] + "..."
-	}
+// saveToolCall saves an assistant tool call as a "tool" row with the
+// call ID, tool name, and arguments in structured fields — NOT as a
+// "$ <name> <args>" text blob. The matching tool-result row (written
+// later by appendToolResult) is keyed by callID.
+//
+// Using structured fields instead of a text blob prevents the model
+// from imitating a "$ toolname args" pattern in its own responses
+// (which would prevent it from using the function-calling API).
+func saveToolCall(store *storage.Store, name, callID, argsJSON string) error {
 	return store.AddMessage(storage.Message{
-		Role:     "tool",
-		ToolName: name,
-		Content:  "$ " + name + " " + summary,
+		Role:       "tool",
+		ToolName:   name,
+		ToolCallID: callID,
+		Args:       argsJSON,
+		// Content intentionally left empty; appendToolResult fills it
+		// in. (An empty tool row is unusual but valid; the result is
+		// required for the model to do anything useful, so we never
+		// reach a stable state without one.)
 	})
 }
 
-// appendToolResult locates the most recent tool message with matching name
-// and appends the result on a new line.
-func appendToolResult(store *storage.Store, name, result string) error {
+// appendToolResult locates the most recent tool row with the given
+// callID and sets its Content to the result. Keying by callID (rather
+// than tool name) means a single assistant turn can issue two calls
+// to the same tool and the results stay attached to the right call.
+func appendToolResult(store *storage.Store, callID, result string) error {
 	msgs, err := store.GetMessages()
 	if err != nil {
 		return err
 	}
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "tool" && msgs[i].ToolName == name {
-			msgs[i].Content = strings.TrimRight(msgs[i].Content, "\n") + "\n" + result
+		if msgs[i].Role == "tool" && msgs[i].ToolCallID == callID {
+			msgs[i].Content = result
 			return store.UpdateMessage(msgs[i])
 		}
 	}
 	// No matching call; record as a standalone tool row.
 	return store.AddMessage(storage.Message{
-		Role:     "tool",
-		ToolName: name,
-		Content:  result,
+		Role:    "tool",
+		Content: result,
 	})
 }
