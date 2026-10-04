@@ -308,7 +308,7 @@ func main() {
 			// so this is a drop-in replacement for @every polling.
 			jobName := job.Name
 			jobPrompt := job.Prompt
-			fileWatcher.Add(watcher.Watch{
+			fileWatcher.Add(&watcher.Watch{
 				Dir:      filepath.Dir(watchGlob),
 				Pattern:  filepath.Base(watchGlob),
 				Debounce: time.Second,

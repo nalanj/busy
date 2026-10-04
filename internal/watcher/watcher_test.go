@@ -26,7 +26,7 @@ func TestWatcherDetectsNewFile(t *testing.T) {
 	}
 
 	w := New(50 * time.Millisecond)
-	w.Add(Watch{
+	w.Add(&Watch{
 		Dir:      dir,
 		Pattern:  "*.md",
 		Debounce: 10 * time.Millisecond,
@@ -81,7 +81,7 @@ func TestWatcherDetectsModification(t *testing.T) {
 	}
 
 	w := New(50 * time.Millisecond)
-	w.Add(Watch{
+	w.Add(&Watch{
 		Dir:      dir,
 		Pattern:  "*.md",
 		Debounce: 10 * time.Millisecond,
@@ -136,7 +136,7 @@ func TestWatcherIgnoresUnmatched(t *testing.T) {
 	}
 
 	w := New(50 * time.Millisecond)
-	w.Add(Watch{
+	w.Add(&Watch{
 		Dir:      dir,
 		Pattern:  "*.md",
 		Debounce: 10 * time.Millisecond,
@@ -171,7 +171,7 @@ func TestWatcherDebounce(t *testing.T) {
 	}
 
 	w := New(30 * time.Millisecond)
-	w.Add(Watch{
+	w.Add(&Watch{
 		Dir:      dir,
 		Pattern:  "*.md",
 		Debounce: 200 * time.Millisecond,
@@ -219,7 +219,7 @@ func TestWatcherReportsRemoved(t *testing.T) {
 	}
 
 	w := New(50 * time.Millisecond)
-	w.Add(Watch{
+	w.Add(&Watch{
 		Dir:      dir,
 		Pattern:  "*.md",
 		Debounce: 10 * time.Millisecond,
@@ -268,7 +268,7 @@ func TestWatcherMultiplePaths(t *testing.T) {
 	}
 
 	w := New(50 * time.Millisecond)
-	w.Add(Watch{
+	w.Add(&Watch{
 		Dir:      dir,
 		Pattern:  "*.md",
 		Debounce: 10 * time.Millisecond,

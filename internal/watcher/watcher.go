@@ -66,7 +66,7 @@ func New(interval time.Duration) *Watcher {
 
 // Add registers a watch. Add must be called before Start. If Debounce
 // is zero, defaults to 200ms. If OnChange is nil, a no-op is used.
-func (w *Watcher) Add(watch Watch) {
+func (w *Watcher) Add(watch *Watch) {
 	if watch.Debounce == 0 {
 		watch.Debounce = 200 * time.Millisecond
 	}
@@ -77,7 +77,7 @@ func (w *Watcher) Add(watch Watch) {
 		watch.states = make(map[string]fileState)
 	}
 	w.mu.Lock()
-	w.watches = append(w.watches, &watch)
+	w.watches = append(w.watches, watch)
 	w.mu.Unlock()
 }
 
