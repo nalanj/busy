@@ -35,39 +35,25 @@ func loadMessages(store *storage.Store) ([]sorus.Message, error) {
 			continue
 		}
 		if m.Role == "tool" {
-			// Old-format rows (saved before the ToolCallID/Args fields
-			// existed) have empty ToolCallID. The function-calling API
-			// rejects a tool_result whose tool_use_id doesn't match a
-			// tool_use in the same request, so we can't safely emit these
-			// as proper tool-result messages. Fall back to plain text
-			// in the next message instead — the model still sees the
-			// result, just not as a structured tool message.
-			if m.ToolCallID == "" {
-				out = append(out, sorus.Message{
-					Role: sorus.RoleUser,
-					Content: []sorus.Part{
-						sorus.Text{Value: "[historical tool result]\n" + m.Content},
-					},
-				})
-				continue
-			}
-			// Render as a proper tool-result message. Include the original
-			// call args (if stored) so the model can re-derive what call
-			// this was a response to — since we don't keep the
-			// assistant's tool call alongside the result.
-			result := m.Content
-			if m.Args != "" {
-				result = "Call: " + m.ToolName + "(" + m.Args + ")\nResult: " + m.Content
-			}
+			// Always render persisted tool results as plain text in a
+			// user-role message. Two reasons:
+			//
+			//  1. We don't persist the assistant's tool_use blocks
+			//     alongside the results, so a stored ToolCallID often
+			//     references a tool_use that isn't in the current
+			//     request. The function-calling API rejects such
+			//     requests with "tool result's tool id not found".
+			//
+			//  2. Across container restarts or job boundaries, the
+			//     order/counting of tool calls in history may not match
+			//     what the model emitted, even if IDs happen to line up.
+			//
+			// The model still sees the result content. We just lose the
+			// structured tool_use/tool_result pairing on resume.
 			out = append(out, sorus.Message{
-				Role: sorus.RoleTool,
+				Role: sorus.RoleUser,
 				Content: []sorus.Part{
-					sorus.ToolResult{
-						ToolCallID: m.ToolCallID,
-						Content: []sorus.Part{
-							sorus.Text{Value: result},
-						},
-					},
+					sorus.Text{Value: "[historical tool result]\n" + m.Content},
 				},
 			})
 			continue

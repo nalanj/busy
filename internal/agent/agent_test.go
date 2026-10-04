@@ -333,10 +333,11 @@ func TestSummarizeArgs(t *testing.T) {
 }
 
 // Verifies the tool call + result round-trips through the store as
-// proper sorus.Message{Role: RoleTool, Content: [ToolResult]} with
-// the args in a separate field — NOT as a flattened "$ name args\nresult"
-// text blob that would teach the model to imitate that pattern in its
-// own responses.
+// plain text in a user-role message — NOT as a flattened
+// "$ name args\nresult" text blob that would teach the model to
+// imitate that pattern in its own responses, AND NOT as a structured
+// tool_result (which would carry a tool_use_id that no longer matches
+// any tool_use after a container restart or cross-job replay).
 func TestToolCallRoundTrip(t *testing.T) {
 	store, err := storage.NewStore(t.TempDir())
 	if err != nil {
@@ -359,31 +360,15 @@ func TestToolCallRoundTrip(t *testing.T) {
 		t.Fatalf("expected 1 message after load, got %d", len(loaded))
 	}
 	msg := loaded[0]
-	if msg.Role != sorus.RoleTool {
-		t.Errorf("expected RoleTool, got %q", msg.Role)
+	if msg.Role != sorus.RoleUser {
+		t.Errorf("expected RoleUser (loaded tool rows render as plain text), got %q", msg.Role)
 	}
 	if len(msg.Content) != 1 {
 		t.Fatalf("expected 1 part, got %d", len(msg.Content))
 	}
-	tr, ok := msg.Content[0].(sorus.ToolResult)
+	txt, ok := msg.Content[0].(sorus.Text)
 	if !ok {
-		t.Fatalf("expected sorus.ToolResult, got %T", msg.Content[0])
-	}
-	if tr.ToolCallID != "toolu_abc123" {
-		t.Errorf("expected tool_call_id 'toolu_abc123', got %q", tr.ToolCallID)
-	}
-	if len(tr.Content) != 1 {
-		t.Fatalf("expected 1 result part, got %d", len(tr.Content))
-	}
-	txt, ok := tr.Content[0].(sorus.Text)
-	if !ok {
-		t.Fatalf("expected sorus.Text, got %T", tr.Content[0])
-	}
-	// The args should be rendered into the result text so the model
-	// can re-derive what call this was a response to. The result body
-	// itself must be present verbatim.
-	if !strings.Contains(txt.Value, "Call: bash({\"command\":\"ls\"})") {
-		t.Errorf("expected rendered call in result text, got: %q", txt.Value)
+		t.Fatalf("expected sorus.Text, got %T", msg.Content[0])
 	}
 	if !strings.Contains(txt.Value, "file1\nfile2") {
 		t.Errorf("expected result body in result text, got: %q", txt.Value)
