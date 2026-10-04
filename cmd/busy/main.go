@@ -200,6 +200,7 @@ func main() {
 				// pending briefs, render the job's prompt template with
 				// the list so the LLM doesn't have to rediscover them
 				// (which it has been doing unreliably).
+				var processedBrief *briefwatcher.Brief
 				if queuedJob.Name == "brief-watcher" {
 					pending, err := briefwatcher.Check("/inbox/briefs", "/home/agent/.local/share/busy/briefs-state.json")
 					if err != nil {
@@ -211,6 +212,7 @@ func main() {
 						jobsMu.Unlock()
 						continue
 					} else {
+						processedBrief = &pending[0]
 						names := make([]string, 0, len(pending))
 						for _, b := range pending {
 							names = append(names, b.Name)
@@ -229,6 +231,24 @@ func main() {
 				log("info", "queue", fmt.Sprintf("dequeued job %s", queuedJob.Name))
 				web.EmitGlobal("queue", map[string]interface{}{"action": "dequeue", "job": queuedJob})
 				runJobFromQueue(ctx, runner, queuedJob)
+
+				// For brief-watcher, the host updates the state based on
+				// whether the model actually produced a plan file. This
+				// takes the state file out of the model's hands — every
+				// earlier failure mode (extra wrapping keys, wrong
+				// field names, missing update) is eliminated.
+				if processedBrief != nil {
+					planPath := filepath.Join("/outbox", processedBrief.Name, "plan.md")
+					if _, err := os.Stat(planPath); err == nil {
+						if err := briefwatcher.MarkDone("/home/agent/.local/share/busy/briefs-state.json", processedBrief.Name, processedBrief.Mtime, processedBrief.Sha); err != nil {
+							log("warn", "briefwatcher", fmt.Sprintf("failed to mark %s done: %v", processedBrief.Name, err))
+						} else {
+							log("info", "briefwatcher", fmt.Sprintf("marked %s done (plan found)", processedBrief.Name))
+						}
+					} else {
+						log("warn", "briefwatcher", fmt.Sprintf("no plan at %s; %s will retry next cycle", planPath, processedBrief.Name))
+					}
+				}
 
 				// Mark job as done
 				jobsMu.Lock()

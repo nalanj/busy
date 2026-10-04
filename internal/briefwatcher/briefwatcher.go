@@ -115,3 +115,46 @@ func Check(inboxDir, statePath string) ([]Brief, error) {
 
 	return pending, nil
 }
+
+// MarkDone updates the state file to record that the brief with the
+// given name has been processed. The mtime and sha should be the
+// values Check returned for the brief; on the next Check call the
+// same values will match and the brief will be skipped.
+//
+// This is intended to be called by the host process (main.go) AFTER
+// the LLM has produced its output, NOT by the model itself. Letting
+// the model write the state is unreliable: it wraps entries in
+// arbitrary outer keys, uses the wrong field names, or simply
+// forgets — every error mode the brief-watcher's earlier state-file
+// runs exhibited.
+//
+// The state is written atomically via a temp file + rename so a
+// crash mid-write can't corrupt the state file. A missing or
+// malformed existing state file is treated as empty; only the entry
+// for `name` is written (other entries are preserved).
+func MarkDone(statePath, name string, mtime int64, sha string) error {
+	state := processedState{}
+	if data, err := os.ReadFile(statePath); err == nil {
+		// Tolerate malformed state — start fresh rather than refuse to
+		// update. The next Check will re-process anything that was in
+		// the corrupted state.
+		_ = json.Unmarshal(data, &state)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("reading state file %s: %w", statePath, err)
+	}
+
+	state[name] = struct {
+		Mtime int64  `json:"mtime"`
+		Sha   string `json:"sha"`
+	}{Mtime: mtime, Sha: sha}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling state: %w", err)
+	}
+	tmpPath := statePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", tmpPath, err)
+	}
+	return os.Rename(tmpPath, statePath)
+}
