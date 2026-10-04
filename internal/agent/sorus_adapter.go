@@ -35,6 +35,22 @@ func loadMessages(store *storage.Store) ([]sorus.Message, error) {
 			continue
 		}
 		if m.Role == "tool" {
+			// Old-format rows (saved before the ToolCallID/Args fields
+			// existed) have empty ToolCallID. The function-calling API
+			// rejects a tool_result whose tool_use_id doesn't match a
+			// tool_use in the same request, so we can't safely emit these
+			// as proper tool-result messages. Fall back to plain text
+			// in the next message instead — the model still sees the
+			// result, just not as a structured tool message.
+			if m.ToolCallID == "" {
+				out = append(out, sorus.Message{
+					Role: sorus.RoleUser,
+					Content: []sorus.Part{
+						sorus.Text{Value: "[historical tool result]\n" + m.Content},
+					},
+				})
+				continue
+			}
 			// Render as a proper tool-result message. Include the original
 			// call args (if stored) so the model can re-derive what call
 			// this was a response to — since we don't keep the
