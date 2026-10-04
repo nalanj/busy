@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/nalanj/busy/internal/config"
 	"github.com/nalanj/busy/internal/queue"
 	"github.com/nalanj/busy/internal/scheduler"
+	"github.com/nalanj/busy/internal/watcher"
 	"github.com/nalanj/busy/internal/web"
 )
 
@@ -258,6 +260,11 @@ func main() {
 		}
 	}()
 
+	// Set up file watcher for any @watch schedules. The watcher
+	// polls at 1-second intervals and dispatches to per-watch
+	// callbacks (which enqueue jobs into the regular queue).
+	fileWatcher := watcher.New(time.Second)
+
 	sched := scheduler.New()
 
 	for _, job := range cfg.Jobs {
@@ -294,6 +301,30 @@ func main() {
 		} else if schedule == "@web-message" {
 			// @web-message is triggered via web API, not scheduler
 			log("info", "scheduler", fmt.Sprintf("job %s waiting for web input", job.Name))
+		} else if watchGlob, isWatch := isWatchSchedule(schedule); isWatch {
+			// @watch <glob> — file events drive the job. The watcher
+			// polls and calls this callback when matching files change.
+			// The brief-watcher's pre-check still runs inside the agent
+			// so this is a drop-in replacement for @every polling.
+			jobName := job.Name
+			jobPrompt := job.Prompt
+			fileWatcher.Add(watcher.Watch{
+				Dir:      filepath.Dir(watchGlob),
+				Pattern:  filepath.Base(watchGlob),
+				Debounce: time.Second,
+				OnChange: func(paths []string) {
+					log("info", "watch", fmt.Sprintf("%s: %d file(s) changed", jobName, len(paths)))
+					enqJob := queue.Job{
+						Name:       jobName,
+						Prompt:     jobPrompt,
+						Trigger:    "@watch",
+						EnqueuedAt: time.Now(),
+					}
+					jobQueue.Enqueue(enqJob)
+					web.EmitGlobal("queue", map[string]interface{}{"action": "enqueue", "job": enqJob})
+				},
+			})
+			log("info", "scheduler", fmt.Sprintf("job %s watching %s", jobName, watchGlob))
 		} else {
 			// Schedule recurring jobs
 			_, err := sched.Add(job.Name, schedule, func() {
@@ -319,7 +350,9 @@ func main() {
 	}
 
 	sched.Start()
+	fileWatcher.Start(ctx)
 	wg.Wait()
+	fileWatcher.Stop()
 }
 
 func runJobFromQueue(ctx context.Context, runner *agent.Runner, job *queue.Job) {
@@ -353,4 +386,19 @@ func renderBriefWatcherPrompt(tmplSrc string, pending []briefwatcher.Brief) (str
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// isWatchSchedule checks whether schedule is an @watch directive and
+// returns the glob. It's a thin wrapper around scheduler's parser
+// that turns the typed error into a friendly (glob, ok) signature.
+func isWatchSchedule(schedule string) (string, bool) {
+	_, err := scheduler.Parse(schedule)
+	if err == nil {
+		return "", false
+	}
+	var wsErr *scheduler.WatchScheduleError
+	if errors.As(err, &wsErr) {
+		return wsErr.Glob, true
+	}
+	return "", false
 }

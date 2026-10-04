@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -26,7 +27,7 @@ func TestParseSchedule(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result, err := parseSchedule(tt.input)
+			result, err := Parse(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Expected error for '%s'", tt.input)
@@ -108,5 +109,35 @@ func TestRunOnce(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if !called {
 		t.Error("RunOnce did not call the function")
+	}
+}
+
+// Verifies that @watch schedules surface through *WatchScheduleError
+// so the caller can dispatch them to the watcher package.
+func TestParseWatchSchedule(t *testing.T) {
+	_, err := Parse("@watch /inbox/briefs/*.md")
+	if err == nil {
+		t.Fatal("expected error for @watch schedule")
+	}
+	if !errors.Is(err, ErrWatchSchedule) {
+		t.Errorf("expected errors.Is(err, ErrWatchSchedule), got %v", err)
+	}
+	var wsErr *WatchScheduleError
+	if !errors.As(err, &wsErr) {
+		t.Errorf("expected errors.As to extract *WatchScheduleError")
+	}
+	if wsErr.Glob != "/inbox/briefs/*.md" {
+		t.Errorf("expected glob /inbox/briefs/*.md, got %q", wsErr.Glob)
+	}
+}
+
+// @watch without an argument should be an error, not silently misroute.
+func TestParseWatchScheduleMissingArg(t *testing.T) {
+	_, err := Parse("@watch ")
+	if err == nil {
+		t.Fatal("expected error for @watch with no glob")
+	}
+	if errors.Is(err, ErrWatchSchedule) {
+		t.Errorf("expected a real error, not ErrWatchSchedule; got %v", err)
 	}
 }

@@ -42,6 +42,7 @@ jobs:
 
 - **Cron**: `0 0 9 * * *` (6 fields with seconds: sec min hour day month dow)
 - **Interval**: `@every 30s`, `@every 5m`, `@every 1h`
+- **File watch**: `@watch <glob>` - fires when files matching the glob change (1-second polling, 200ms debounce). Glob is matched against the basename within the directory it lives in, e.g. `@watch /inbox/briefs/*.md`.
 - **One-shot**: `@once`
 - **Session-start**: `@session-start` - runs once on first start with setup prompt
 
