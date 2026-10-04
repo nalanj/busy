@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,11 +12,9 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"text/template"
 	"time"
 
 	"github.com/nalanj/busy/internal/agent"
-	"github.com/nalanj/busy/internal/briefwatcher"
 	"github.com/nalanj/busy/internal/config"
 	"github.com/nalanj/busy/internal/queue"
 	"github.com/nalanj/busy/internal/scheduler"
@@ -194,63 +191,10 @@ func main() {
 				runningJobs[queuedJob.Name] = true
 				jobsMu.Unlock()
 
-				// Pre-flight check for the brief-watcher: scan the inbox
-				// against the state file. If nothing has changed, skip
-				// the LLM call entirely — this is the whole point of the
-				// brief-watcher, since polling at @every 5m would
-				// otherwise burn tokens on every tick. When there ARE
-				// pending briefs, render the job's prompt template with
-				// the list so the LLM doesn't have to rediscover them
-				// (which it has been doing unreliably).
-				var processedBrief *briefwatcher.Brief
-				if queuedJob.Name == "brief-watcher" {
-					pending, err := briefwatcher.Check("/inbox/briefs", "/home/agent/.local/share/busy/briefs-state.json")
-					if err != nil {
-						log("warn", "briefwatcher", fmt.Sprintf("pre-check failed: %v (proceeding anyway)", err))
-					} else if len(pending) == 0 {
-						log("info", "briefwatcher", "no pending briefs; skipping LLM call")
-						jobsMu.Lock()
-						delete(runningJobs, queuedJob.Name)
-						jobsMu.Unlock()
-						continue
-					} else {
-						processedBrief = &pending[0]
-						names := make([]string, 0, len(pending))
-						for _, b := range pending {
-							names = append(names, b.Name)
-						}
-						log("info", "briefwatcher", fmt.Sprintf("%d pending brief(s): %s", len(pending), strings.Join(names, ", ")))
-						rendered, rerr := renderBriefWatcherPrompt(queuedJob.Prompt, pending)
-						if rerr != nil {
-							log("warn", "briefwatcher", fmt.Sprintf("prompt render failed: %v (proceeding with static prompt)", rerr))
-						} else {
-							queuedJob.Prompt = rendered
-						}
-					}
-				}
-
 				// Run the job
 				log("info", "queue", fmt.Sprintf("dequeued job %s", queuedJob.Name))
 				web.EmitGlobal("queue", map[string]interface{}{"action": "dequeue", "job": queuedJob})
 				runJobFromQueue(ctx, runner, queuedJob)
-
-				// For brief-watcher, the host updates the state based on
-				// whether the model actually produced a plan file. This
-				// takes the state file out of the model's hands — every
-				// earlier failure mode (extra wrapping keys, wrong
-				// field names, missing update) is eliminated.
-				if processedBrief != nil {
-					planPath := filepath.Join("/outbox", processedBrief.Name, "plan.md")
-					if _, err := os.Stat(planPath); err == nil {
-						if err := briefwatcher.MarkDone("/home/agent/.local/share/busy/briefs-state.json", processedBrief.Name, processedBrief.Mtime, processedBrief.Sha); err != nil {
-							log("warn", "briefwatcher", fmt.Sprintf("failed to mark %s done: %v", processedBrief.Name, err))
-						} else {
-							log("info", "briefwatcher", fmt.Sprintf("marked %s done (plan found)", processedBrief.Name))
-						}
-					} else {
-						log("warn", "briefwatcher", fmt.Sprintf("no plan at %s; %s will retry next cycle", planPath, processedBrief.Name))
-					}
-				}
 
 				// Mark job as done
 				jobsMu.Lock()
@@ -304,7 +248,9 @@ func main() {
 		} else if watchGlob, isWatch := isWatchSchedule(schedule); isWatch {
 			// @watch <glob> — file events drive the job. The watcher
 			// polls and calls this callback when matching files change.
-			// The brief-watcher's pre-check still runs inside the agent
+			// The watcher fires on file events. Each job is responsible
+			// for any deduplication or state-tracking it needs (e.g.
+			// a brief-watcher job might inspect /inbox/briefs/ itself).
 			// so this is a drop-in replacement for @every polling.
 			jobName := job.Name
 			jobPrompt := job.Prompt
@@ -367,25 +313,6 @@ func runJobFromQueue(ctx context.Context, runner *agent.Runner, job *queue.Job) 
 	} else {
 		log("info", "job", fmt.Sprintf("job %s completed", job.Name))
 	}
-}
-
-// renderBriefWatcherPrompt renders the brief-watcher job's prompt
-// template with the list of pending briefs. The template uses
-// text/template syntax (so `{{.Briefs}}` and friends work); the
-// data passed in has a Briefs field (a slice of briefwatcher.Brief
-// values with Name, Path, Mtime, Sha).
-func renderBriefWatcherPrompt(tmplSrc string, pending []briefwatcher.Brief) (string, error) {
-	tmpl, err := template.New("briefwatcher").Parse(tmplSrc)
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, struct {
-		Briefs []briefwatcher.Brief
-	}{Briefs: pending}); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 // isWatchSchedule checks whether schedule is an @watch directive and
