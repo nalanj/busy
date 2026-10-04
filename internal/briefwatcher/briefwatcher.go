@@ -103,5 +103,15 @@ func Check(inboxDir, statePath string) ([]Brief, error) {
 		return pending[i].Name < pending[j].Name
 	})
 
+	// Return only one brief per call so each fire handles a single
+	// brief. With three or more pending, processing them all in one
+	// run lets the model accumulate a large tool-call history
+	// (read_file, bash, etc.) and the next API call times out. One
+	// brief per cycle keeps the session compact and recovers cleanly
+	// from any individual failure.
+	if len(pending) > 1 {
+		pending = pending[:1]
+	}
+
 	return pending, nil
 }

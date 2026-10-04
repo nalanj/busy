@@ -148,3 +148,24 @@ func itoa(n int64) string {
 	}
 	return string(buf[i:])
 }
+// When several briefs are pending, Check returns just the first one
+// (alphabetical by name) so the caller processes one brief per cycle
+// rather than batching them and blowing up the agent's session.
+func TestCheckLimitsToOnePending(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte("body"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := Check(dir, filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 pending, got %d", len(got))
+	}
+	if got[0].Name != "alpha" {
+		t.Errorf("expected first alphabetical 'alpha', got %q", got[0].Name)
+	}
+}
