@@ -1,7 +1,14 @@
 // Package watcher implements a polling-based file watcher used by jobs
-// scheduled as @watch in the agent config. It tracks per-path mtime
-// and size, dispatches when a file changes, and debounces bursts so a
-// noisy editor save doesn't fire the job multiple times.
+// scheduled as @watch in the agent config. It tracks per-path sha256
+// checksums, dispatches when a file's content changes, and debounces
+// bursts so a noisy editor save doesn't fire the job multiple times.
+//
+// Checksums are used (rather than mtime + size) so that the watcher
+// ignores metadata-only changes (`touch`, `cp` of the same content,
+// mtime skew from NFS) and reliably catches content-only changes
+// inside the same second (mtime granularity on some filesystems is
+// 1–2s). The cost is one read per watched file per tick; for briefs
+// in /inbox/briefs that's a few KB — negligible.
 //
 // Polling (rather than fsnotify or another event-driven backend) keeps
 // this package portable, dependency-free, and easy to reason about.
@@ -11,6 +18,8 @@ package watcher
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,14 +38,13 @@ type Watch struct {
 	OnChange func(paths []string)
 
 	mu      sync.Mutex
-	states  map[string]fileState // path → last seen (mtime, size)
+	states  map[string]fileState // path → last seen sha256 hex
 	pending []string            // paths accumulated for the current debounce window
 	timer   *time.Timer          // pending debounce timer; nil when idle
 }
 
 type fileState struct {
-	mtime int64 // nanoseconds since epoch
-	size  int64
+	sha string // hex-encoded sha256 of the file's content
 }
 
 // Watcher polls all registered watches at a fixed interval and
@@ -144,11 +152,11 @@ func (w *Watcher) tickOne(watch *Watch) {
 	var changed []string
 	for _, p := range matches {
 		seen[p] = true
-		info, err := os.Stat(p)
+		sha, err := hashFile(p)
 		if err != nil {
 			continue
 		}
-		cur := fileState{mtime: info.ModTime().UnixNano(), size: info.Size()}
+		cur := fileState{sha: sha}
 		if prev, ok := watch.states[p]; !ok || prev != cur {
 			changed = append(changed, p)
 			watch.states[p] = cur
@@ -184,4 +192,15 @@ func (w *Watch) scheduleCallback(paths []string, debounce time.Duration) {
 			cb(batch)
 		}
 	})
+}
+// hashFile returns the lowercase hex-encoded sha256 of the file's content.
+// On any error (read failure, etc.) it returns an empty string and the
+// error; callers skip the file in that case.
+func hashFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }

@@ -203,6 +203,122 @@ func TestWatcherDebounce(t *testing.T) {
 	}
 }
 
+// Regression: mtime-only changes (touch) must not fire. Checksums
+// are the signal — mtime is unreliable (NFS skew, same-second
+// edits, `touch` without content change).
+func TestWatcherIgnoresMtimeOnlyChanges(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "x.md")
+	if err := os.WriteFile(f, []byte("v1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	var mu sync.Mutex
+	cb := func(paths []string) {
+		mu.Lock()
+		got = append(got, paths...)
+		mu.Unlock()
+	}
+
+	w := New(50 * time.Millisecond)
+	w.Add(&Watch{
+		Dir:      dir,
+		Pattern:  "*.md",
+		Debounce: 10 * time.Millisecond,
+		OnChange: cb,
+	})
+	ctx, cancel := contextWithTimeout()
+	defer cancel()
+	w.Start(ctx)
+	defer w.Stop()
+
+	// Let initial scan happen — fires once with x.md.
+	if !waitFor(500*time.Millisecond, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(got) >= 1
+	}) {
+		t.Fatalf("expected initial scan to fire")
+	}
+	mu.Lock()
+	first := len(got)
+	mu.Unlock()
+
+	// Touch the file: mtime updates, content doesn't.
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(f, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait through several ticks.
+	time.Sleep(300 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != first {
+		t.Errorf("expected touch (mtime only) NOT to fire; got %d new callbacks (was %d)", len(got)-first, 0)
+	}
+}
+
+// Regression: content changes that keep the same byte length must
+// still fire. mtime+size would have missed this.
+func TestWatcherDetectsContentChangeSameSize(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "x.md")
+	if err := os.WriteFile(f, []byte("aaaa"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	var mu sync.Mutex
+	cb := func(paths []string) {
+		mu.Lock()
+		got = append(got, paths...)
+		mu.Unlock()
+	}
+
+	w := New(50 * time.Millisecond)
+	w.Add(&Watch{
+		Dir:      dir,
+		Pattern:  "*.md",
+		Debounce: 10 * time.Millisecond,
+		OnChange: cb,
+	})
+	ctx, cancel := contextWithTimeout()
+	defer cancel()
+	w.Start(ctx)
+	defer w.Stop()
+
+	if !waitFor(500*time.Millisecond, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(got) >= 1
+	}) {
+		t.Fatalf("expected initial scan to fire")
+	}
+	mu.Lock()
+	first := len(got)
+	mu.Unlock()
+
+	// Rewrite with different content of the same length.
+	if err := os.WriteFile(f, []byte("bbbb"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Force mtime forward so any test that keyed off mtime would
+	// also see a change.
+	future := time.Now().Add(time.Second)
+	os.Chtimes(f, future, future)
+
+	if !waitFor(500*time.Millisecond, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(got) > first
+	}) {
+		t.Errorf("expected callback for same-size content change")
+	}
+}
+
 func TestWatcherReportsRemoved(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "x.md")
@@ -292,9 +408,10 @@ func TestWatcherMultiplePaths(t *testing.T) {
 	first := len(got)
 	mu.Unlock()
 
-	// Modify only one file.
-	future := time.Now().Add(time.Second)
-	os.Chtimes(filepath.Join(dir, "b.md"), future, future)
+	// Modify only one file's content (checksum-based detection).
+	if err := os.WriteFile(filepath.Join(dir, "b.md"), []byte("v2"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	if !waitFor(500*time.Millisecond, func() bool {
 		mu.Lock()
