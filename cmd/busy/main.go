@@ -46,6 +46,20 @@ func log(level, logType, message string) {
 }
 
 func main() {
+	// Subcommand: `busy one-shot --config … --prompt … --out …`
+	// Run the agent once with the given prompt and write the final
+	// assistant text to --out. No daemon, no jobs, no web server —
+	// the model runs once and the process exits. Intended for shell
+	// scripts and other one-shot drivers that want busy to handle the
+	// LLM call but not the orchestration.
+	if len(os.Args) > 1 && os.Args[1] == "one-shot" {
+		if err := runOneShot(os.Args[2:]); err != nil {
+			log("error", "one-shot", err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
 	configPath := flag.String("config", "", "Path to agent config file")
 	flag.Parse()
 
@@ -328,4 +342,78 @@ func isWatchSchedule(schedule string) (string, bool) {
 		return wsErr.Glob, true
 	}
 	return "", false
+}
+
+// runOneShot implements `busy one-shot`. Loads the agent config, runs
+// the agent once with the supplied prompt, then writes the final
+// assistant text to the output path (after stripping the trailing
+// DONE marker). The runner's session JSONL is not touched on exit —
+// it's a transient one-shot call, not a persistent agent loop.
+func runOneShot(args []string) error {
+	fs := flag.NewFlagSet("one-shot", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to agent config file")
+	prompt := fs.String("prompt", "", "Prompt to send to the agent")
+	outPath := fs.String("out", "", "Path to write the agent's response")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return fmt.Errorf("--config is required")
+	}
+	if *prompt == "" {
+		return fmt.Errorf("--prompt is required")
+	}
+	if *outPath == "" {
+		return fmt.Errorf("--out is required")
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	if cfg.Agent.Name == "" {
+		return fmt.Errorf("agent.name is required in config")
+	}
+
+	log("info", "one-shot", fmt.Sprintf("loaded config from %s", *configPath))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runner, err := agent.New(ctx, &cfg.Agent)
+	if err != nil {
+		return fmt.Errorf("creating runner: %w", err)
+	}
+	defer runner.Close()
+
+	if err := runner.Run(ctx, *prompt, "one-shot"); err != nil {
+		return fmt.Errorf("agent run failed: %w", err)
+	}
+
+	msgs, err := runner.Store().GetMessages()
+	if err != nil {
+		return fmt.Errorf("reading messages: %w", err)
+	}
+
+	var lastText string
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "assistant" && msgs[i].Content != "" {
+			lastText = msgs[i].Content
+			break
+		}
+	}
+	if lastText == "" {
+		return fmt.Errorf("no assistant text in final messages")
+	}
+
+	// Strip the trailing DONE marker the runner expects the model to
+	// emit on its own line; the plan file shouldn't carry that token.
+	lastText = strings.TrimSuffix(lastText, "<<<<<DONE>>>>>")
+	lastText = strings.TrimSpace(lastText)
+
+	if err := os.WriteFile(*outPath, []byte(lastText+"\n"), 0644); err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+	log("info", "one-shot", fmt.Sprintf("wrote %d bytes to %s", len(lastText), *outPath))
+	return nil
 }
