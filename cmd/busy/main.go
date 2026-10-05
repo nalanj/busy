@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -204,6 +205,23 @@ func main() {
 				}
 				runningJobs[queuedJob.Name] = true
 				jobsMu.Unlock()
+
+				// Preconditions: if any returns non-zero, skip the job
+				// without running the LLM. This is what makes
+				// "@watch /inbox/briefs/*.md" cheap when nothing has
+				// changed — the watcher still fires, the script
+				// answers "is there work to do?", and we save the
+				// token spend.
+				if job, ok := findJob(cfg.Jobs, queuedJob.Name); ok && len(job.Preconditions) > 0 {
+					skip, reason := checkPreconditions(job.Preconditions)
+					if skip {
+						log("info", "queue", fmt.Sprintf("skip %s: %s", queuedJob.Name, reason))
+						jobsMu.Lock()
+						delete(runningJobs, queuedJob.Name)
+						jobsMu.Unlock()
+						continue
+					}
+				}
 
 				// Run the job
 				log("info", "queue", fmt.Sprintf("dequeued job %s", queuedJob.Name))
@@ -416,4 +434,67 @@ func runOneShot(args []string) error {
 	}
 	log("info", "one-shot", fmt.Sprintf("wrote %d bytes to %s", len(lastText), *outPath))
 	return nil
+}
+
+// findJob looks up a job by name in the slice. Returns the job and
+// true on hit, zero value and false on miss.
+func findJob(jobs []config.JobConfig, name string) (config.JobConfig, bool) {
+	for _, j := range jobs {
+		if j.Name == name {
+			return j, true
+		}
+	}
+	return config.JobConfig{}, false
+}
+
+// checkPreconditions runs each precondition through `sh -c`. If any
+// returns non-zero, the job should be skipped. The first failing
+// command's stderr is captured as the reason for the log. An empty
+// preconditions list is treated as "pass" (true).
+func checkPreconditions(conds []string) (skip bool, reason string) {
+	for i, cond := range conds {
+		out, err := runShellCapture(cond)
+		if err != nil {
+			return true, fmt.Sprintf("precondition %d failed: %v", i, err)
+		}
+		if out.ExitCode != 0 {
+			msg := strings.TrimSpace(out.Stdout)
+			if msg == "" {
+				msg = strings.TrimSpace(out.Stderr)
+			}
+			if msg == "" {
+				msg = fmt.Sprintf("exit %d", out.ExitCode)
+			}
+			return true, fmt.Sprintf("precondition %d (%s)", i, msg)
+		}
+	}
+	return false, ""
+}
+
+// shellResult captures stdout/stderr/exit-code from a shell command.
+type shellResult struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
+// runShellCapture runs a command via `sh -c` and returns its output and
+// exit code. Used to evaluate preconditions.
+func runShellCapture(cmd string) (shellResult, error) {
+	c := exec.Command("sh", "-c", cmd)
+	var stdout, stderr strings.Builder
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	err := c.Run()
+	r := shellResult{Stdout: stdout.String(), Stderr: stderr.String()}
+	if err != nil {
+		// `*exec.ExitError` carries the exit code; surface it.
+		if ee, ok := err.(*exec.ExitError); ok {
+			r.ExitCode = ee.ExitCode()
+			return r, nil
+		}
+		return r, err
+	}
+	r.ExitCode = 0
+	return r, nil
 }
